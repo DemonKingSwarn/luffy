@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
+
+	"github.com/ktr0731/go-fuzzyfinder"
 )
 
 func Prompt(label string) string {
@@ -16,17 +17,15 @@ func Prompt(label string) string {
 }
 
 func Select(label string, items []string) int {
-	fmt.Println(label)
-	for i, item := range items {
-		fmt.Printf("%d. %s\n", i+1, item)
+	idx, err := fuzzyfinder.Find(
+		items,
+		func(i int) string {
+			return items[i]
+		},
+	)
+	if err != nil {
+		fmt.Println("Selection cancelled or failed:", err)
+		os.Exit(1)
 	}
-	
-	for {
-		choice := Prompt("Select")
-		idx, err := strconv.Atoi(choice)
-		if err == nil && idx > 0 && idx <= len(items) {
-			return idx - 1
-		}
-		fmt.Println("Invalid selection")
-	}
+	return idx
 }

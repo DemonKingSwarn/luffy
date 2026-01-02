@@ -3,12 +3,23 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"luffy/core"
 	"github.com/spf13/cobra"
 )
+
+var (
+	seasonFlag   int
+	episodeFlag  string
+	actionFlag   string
+)
+
+func init() {
+	rootCmd.Flags().IntVarP(&seasonFlag, "season", "s", 0, "Specify season number")
+	rootCmd.Flags().StringVarP(&episodeFlag, "episodes", "e", "", "Specify episode or range (e.g. 1, 1-5)")
+	rootCmd.Flags().StringVarP(&actionFlag, "action", "a", "", "Action to perform (play, download)")
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "luffy [query]",
@@ -51,7 +62,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		var episodeID string
+		var episodesToProcess []core.Episode
 
 		if ctx.ContentType == core.Series {
 			seasons, err := core.GetSeasons(mediaID, ctx.Client)
@@ -62,79 +73,117 @@ var rootCmd = &cobra.Command{
 				return fmt.Errorf("no seasons found")
 			}
 
-			var sNames []string
-			for _, s := range seasons {
-				sNames = append(sNames, s.Name)
+			var selectedSeason core.Season
+			if seasonFlag > 0 {
+				if seasonFlag > len(seasons) {
+					return fmt.Errorf("season %d not found (max %d)", seasonFlag, len(seasons))
+				}
+				selectedSeason = seasons[seasonFlag-1]
+			} else {
+				var sNames []string
+				for _, s := range seasons {
+					sNames = append(sNames, s.Name)
+				}
+				sIdx := core.Select("Seasons:", sNames)
+				selectedSeason = seasons[sIdx]
 			}
-			sIdx := core.Select("Seasons:", sNames)
-			selectedSeason := seasons[sIdx]
 
-			episodes, err := core.GetEpisodes(selectedSeason.ID, true, ctx.Client)
+			allEpisodes, err := core.GetEpisodes(selectedSeason.ID, true, ctx.Client)
 			if err != nil {
 				return err
 			}
-			if len(episodes) == 0 {
+			if len(allEpisodes) == 0 {
 				return fmt.Errorf("no episodes found")
 			}
 
-			var eNames []string
-			for _, e := range episodes {
-				eNames = append(eNames, e.Name)
-			}
-			eIdx := core.Select("Episodes:", eNames)
-			episodeID = episodes[eIdx].ID
-
-		} else {
-			episodes, err := core.GetEpisodes(mediaID, false, ctx.Client)
-			if err != nil || len(episodes) == 0 {
-				return fmt.Errorf("could not find movie info")
-			}
-
-			if len(episodes) == 1 {
-				episodeID = episodes[0].ID
+			if episodeFlag != "" {
+				indices, err := core.ParseEpisodeRange(episodeFlag)
+				if err != nil {
+					return err
+				}
+				for _, i := range indices {
+					if i < 1 || i > len(allEpisodes) {
+						fmt.Printf("Episode %d out of range (max %d), skipping\n", i, len(allEpisodes))
+						continue
+					}
+					episodesToProcess = append(episodesToProcess, allEpisodes[i-1])
+				}
 			} else {
 				var eNames []string
-				for _, e := range episodes {
+				for _, e := range allEpisodes {
 					eNames = append(eNames, e.Name)
 				}
-				eIdx := core.Select("Episodes/Parts:", eNames)
-				episodeID = episodes[eIdx].ID
+				eIdx := core.Select("Episodes:", eNames)
+				episodesToProcess = append(episodesToProcess, allEpisodes[eIdx])
 			}
-		}
 
-		servers, err := core.GetServers(episodeID, ctx.Client)
-		if err != nil {
-			return err
-		}
-		if len(servers) == 0 {
-			return fmt.Errorf("no servers found")
-		}
-
-		var srvNames []string
-		for _, s := range servers {
-			srvNames = append(srvNames, s.Name)
-		}
-		srvIdx := core.Select("Servers:", srvNames)
-		selectedServer := servers[srvIdx]
-
-		link, err := core.GetLink(selectedServer.ID, ctx.Client)
-		if err != nil {
-			return err
-		}
-
-		actions := []string{"Play", "Copy Link"}
-		actIdx := core.Select("Action:", actions)
-
-		if actions[actIdx] == "Play" {
-			fmt.Println("Starting mpv with:", link)
-			cmd := exec.Command("mpv", link)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				fmt.Println("Error playing:", err)
-			}
 		} else {
-			fmt.Println("Link:", link)
+			// Movie logic
+			allEpisodes, err := core.GetEpisodes(mediaID, false, ctx.Client)
+			if err != nil || len(allEpisodes) == 0 {
+				return fmt.Errorf("could not find movie info")
+			}
+			episodesToProcess = append(episodesToProcess, allEpisodes[0])
+		}
+
+		// Determine action
+		currentAction := actionFlag
+		if currentAction == "" {
+			actions := []string{"Play", "Download"}
+			actIdx := core.Select("Action:", actions)
+			currentAction = actions[actIdx]
+		}
+		currentAction = strings.ToLower(currentAction)
+
+		for _, ep := range episodesToProcess {
+			fmt.Printf("\nProcessing: %s\n", ep.Name)
+			
+			servers, err := core.GetServers(ep.ID, ctx.Client)
+			if err != nil {
+				fmt.Println("Error fetching servers:", err)
+				continue
+			}
+			if len(servers) == 0 {
+				fmt.Println("No servers found")
+				continue
+			}
+
+			selectedServer := servers[0]
+			for _, s := range servers {
+				if strings.Contains(strings.ToLower(s.Name), "vidcloud") {
+					selectedServer = s
+					break
+				}
+			}
+
+			link, err := core.GetLink(selectedServer.ID, ctx.Client)
+			if err != nil {
+				fmt.Println("Error getting link:", err)
+				continue
+			}
+
+			fmt.Println("Decrypting stream...")
+			streamURL, subtitles, err := core.DecryptStream(link, ctx.Client)
+			if err != nil {
+				fmt.Printf("Decryption failed for %s: %v\n", ep.Name, err)
+				continue
+			}
+
+			switch currentAction {
+			case "play":
+				err = core.Play(streamURL, ctx.Title + " - " + ep.Name, core.FLIXHQ_BASE_URL, subtitles)
+				if err != nil {
+					fmt.Println("Error playing:", err)
+				}
+			case "download":
+				homeDir, _ := os.UserHomeDir()
+				err = core.Download(homeDir, ctx.Title + " - " + ep.Name, streamURL, core.FLIXHQ_BASE_URL, subtitles)
+				if err != nil {
+					fmt.Println("Error downloading:", err)
+				}
+			default:
+				fmt.Println("Unknown action:", currentAction)
+			}
 		}
 
 		return nil
