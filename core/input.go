@@ -24,6 +24,8 @@ func Select(label string, items []string) int {
 
 	cfg := LoadConfig()
 	prompt := label + "> "
+	height := "40"
+	layout := fzf.LayoutReverse
 	res, _, err := fzf.FzfPrompt(
 		components,
 		func(i interface{}) string {
@@ -32,6 +34,8 @@ func Select(label string, items []string) int {
 		cfg.FzfPath,
 		&fzf.Options{
 			PromptString: &prompt,
+			Layout:       &layout,
+			Height:       &height,
 		},
 	)
 
@@ -57,9 +61,11 @@ func SelectWithPreview(label string, items []string, previewCmd string) int {
 
 	cfg := LoadConfig()
 	prompt := label + "> "
-	
+	layout := fzf.LayoutReverse
+
 	opts := &fzf.Options{
 		PromptString: &prompt,
+		Layout:       &layout,
 	}
 	
 	if previewCmd != "" {
