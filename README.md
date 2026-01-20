@@ -48,7 +48,7 @@
 If you have Go installed, you can easily install Luffy:
 
 ```bash
-go install github.com/demonkingswarn/luffy@v1.0.4
+go install github.com/demonkingswarn/luffy@v1.0.5
 ```
 
 ### 2. Build from Source
