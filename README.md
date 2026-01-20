@@ -80,7 +80,12 @@ go install github.com/demonkingswarn/luffy@v1.0.5
 - [`iina`](https://iina.io) - Alternate video player for MacOS
 - [`vlc`](https://play.google.com/store/apps/details?id=org.videolan.vlc) - Video Player for Android
 - [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) - Download manager
-- [`fzf`](https://github.com/junegunn/fzf) - for selection menu
+- [`fzf`](https://github.com/junegunn/fzf) - For selection menu
+- [`chafa`](https://github.com/hpjansson/chafa) & [`libsixel`](https://github.com/saitoha/libsixel) - For showing posters.
+
+> [!IMPORTANT]
+> To be able to see the images, you need terminal emulators which support the sixel image protocol.
+> For ex: kitty, alacritty, ghostty, wezterm, foot
 
 ## Usage
 
