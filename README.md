@@ -16,7 +16,7 @@ Luffy scrapes content from high-quality sources and leverages external tools for
 If you have Go installed, you can easily install Luffy:
 
 ```bash
-go install github.com/demonkingswarn/luffy@v1.0.2
+go install github.com/demonkingswarn/luffy@v1.0.3
 ```
 
 ### 2. Build from Source
