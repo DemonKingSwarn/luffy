@@ -67,8 +67,7 @@ func Play(url, title, referer string, subtitles []string) error {
 			args = append(args, fmt.Sprintf("--sub-file=%s", sub))
 		}
 		cmd = exec.Command("mpv", args...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		// Output silenced
 	}
 
 	fmt.Printf("Starting player for %s...\n", title)

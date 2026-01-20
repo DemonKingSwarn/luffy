@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ktr0731/go-fuzzyfinder"
+	"github.com/demonkingswarn/fzf.go"
 )
 
 func Prompt(label string) string {
@@ -17,15 +17,34 @@ func Prompt(label string) string {
 }
 
 func Select(label string, items []string) int {
-	idx, err := fuzzyfinder.Find(
-		items,
-		func(i int) string {
-			return items[i]
+	components := make([]interface{}, len(items))
+	for i := range items {
+		components[i] = i
+	}
+
+	cfg := LoadConfig()
+	prompt := label + "> "
+	res, _, err := fzf.FzfPrompt(
+		components,
+		func(i interface{}) string {
+			return items[i.(int)]
+		},
+		cfg.FzfPath,
+		&fzf.Options{
+			PromptString: &prompt,
 		},
 	)
+
 	if err != nil {
 		fmt.Println("Selection cancelled or failed:", err)
 		os.Exit(1)
 	}
-	return idx
+
+	if res == nil {
+		fmt.Println("No selection made")
+		os.Exit(1)
+	}
+
+	fmt.Print("\033[H\033[2J") // Clear screen
+	return res.(int)
 }
