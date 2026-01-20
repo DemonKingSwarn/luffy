@@ -85,6 +85,7 @@ go install github.com/demonkingswarn/luffy@v1.0.5
 
 > [!IMPORTANT]
 > To be able to see the images, you need terminal emulators which support the sixel image protocol.
+>
 > For ex: kitty, alacritty, ghostty, wezterm, foot
 
 ## Usage
