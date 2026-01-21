@@ -15,7 +15,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   src = fetchurl {
     url = "https://github.com/DemonKingSwarn/luffy/releases/download/v${finalAttrs.version}/luffy";
-    hash = "sha256-783cc59f6e419fd710ebc269899a5a33b9ed452aff0fc7050e22fc86bec32753=";
+    hash = "sha256-783cc59f6e419fd710ebc269899a5a33b9ed452aff0fc7050e22fc86bec32753";
   };
 
   nativeBuildInputs = [makeWrapper];
