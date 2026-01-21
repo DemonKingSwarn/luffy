@@ -113,7 +113,6 @@ go install github.com/demonkingswarn/luffy@v1.0.6
 > ```conf
 > image_backend = "kitty"
 > ```
-> ```
 > config file can be found at  `$HOME/.config/luffy/conf`
 
 ## Usage
