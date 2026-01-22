@@ -1,6 +1,6 @@
 #!/bin/sh
 
-LUFFY_VERSION="1.0.6"
+LUFFY_VERSION="1.0.7"
 LUFFY_URL="https://github.com/demonkingswarn/luffy"
 LUFFY_BINARY="${LUFFY_URL}/releases/download/v${LUFFY_VERSION}/luffy"
 DEPENDS="fzf chafa mpv libsixel-bin yt-dlp"
