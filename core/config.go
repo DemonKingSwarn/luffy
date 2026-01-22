@@ -12,14 +12,16 @@ type Config struct {
 	Player       string
 	ImageBackend string
 	Provider     string
+	DlPath       string
 }
 
 func LoadConfig() *Config {
 	config := &Config{
-		FzfPath:      "fzf",   // Default
-		Player:       "mpv",   // Default player
-		ImageBackend: "sixel", // Default image backend
+		FzfPath:      "fzf",    // Default
+		Player:       "mpv",    // Default player
+		ImageBackend: "sixel",  // Default image backend
 		Provider:     "flixhq", // Default provider
+		DlPath:       "",       // Default: use home directory
 	}
 
 	home, err := os.UserHomeDir()
@@ -55,6 +57,8 @@ func LoadConfig() *Config {
 				config.ImageBackend = value
 			} else if key == "provider" {
 				config.Provider = value
+			} else if key == "dl_path" {
+				config.DlPath = value
 			}
 		}
 	}

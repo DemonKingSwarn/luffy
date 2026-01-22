@@ -10,15 +10,19 @@ import (
 	"strings"
 )
 
-func Download(basePath, name, url, referer, userAgent string, subtitles []string) error {
-	dlPath := filepath.Join(basePath, "Downloads", "luffy")
+func Download(basePath, dlPath, name, url, referer, userAgent string, subtitles []string) error {
+	if dlPath == "" {
+		dlPath = filepath.Join(basePath, "Downloads", "luffy")
+	} else {
+		dlPath = filepath.Join(dlPath, "luffy")
+	}
 	if err := os.MkdirAll(dlPath, 0755); err != nil {
 		return err
 	}
 
 	cleanName := strings.ReplaceAll(name, " ", "-")
 	cleanName = strings.ReplaceAll(cleanName, "\"", "")
-	
+
 	outputTemplate := filepath.Join(dlPath, cleanName+".mp4")
 
 	args := []string{
@@ -46,14 +50,14 @@ func Download(basePath, name, url, referer, userAgent string, subtitles []string
 			if strings.HasSuffix(subURL, ".srt") {
 				ext = ".srt"
 			}
-			
+
 			subPath := filepath.Join(dlPath, cleanName)
 			if i > 0 {
 				subPath += fmt.Sprintf(".eng%d%s", i, ext)
 			} else {
 				subPath += ".eng" + ext
 			}
-			
+
 			fmt.Printf("Downloading subtitle to %s...\n", subPath)
 			if err := downloadFile(subURL, subPath); err != nil {
 				fmt.Printf("Failed to download subtitle: %v\n", err)

@@ -13,9 +13,9 @@ import (
 )
 
 var (
-	seasonFlag   int
-	episodeFlag  string
-	actionFlag   string
+	seasonFlag    int
+	episodeFlag   string
+	actionFlag    string
 	showImageFlag bool
 )
 
@@ -29,10 +29,10 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "luffy [query]",
-	Short: "Watch movies and TV shows from the commandline",
+	Use:     "luffy [query]",
+	Short:   "Watch movies and TV shows from the commandline",
 	Version: core.Version,
-	Args:  cobra.ArbitraryArgs,
+	Args:    cobra.ArbitraryArgs,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := core.NewClient()
@@ -182,7 +182,7 @@ var rootCmd = &cobra.Command{
 			var streamURL string
 			var subtitles []string
 			var err error
-			
+
 			referer := link
 			if strings.EqualFold(cfg.Provider, "hdrezka") {
 				referer = ctx.URL
@@ -238,8 +238,12 @@ var rootCmd = &cobra.Command{
 					fmt.Println("Error playing:", err)
 				}
 			case "download":
+				dlPath := cfg.DlPath
 				homeDir, _ := os.UserHomeDir()
-				err = core.Download(homeDir, name, streamURL, referer, USER_AGENT, subtitles)
+				if dlPath == "" {
+					dlPath = homeDir
+				}
+				err = core.Download(homeDir, dlPath, name, streamURL, referer, USER_AGENT, subtitles)
 				if err != nil {
 					fmt.Println("Error downloading:", err)
 				}
@@ -255,7 +259,7 @@ var rootCmd = &cobra.Command{
 			if len(episodesToProcess) > 0 {
 				selectedServer = episodesToProcess[0]
 			}
-			
+
 			for _, s := range episodesToProcess {
 				if strings.EqualFold(cfg.Provider, "hdrezka") {
 					selectedServer = s
@@ -311,7 +315,6 @@ var rootCmd = &cobra.Command{
 
 		return nil
 	},
-
 }
 
 func Execute() {
@@ -319,4 +322,3 @@ func Execute() {
 		fmt.Println(err)
 	}
 }
-
