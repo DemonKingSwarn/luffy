@@ -44,6 +44,8 @@ var rootCmd = &cobra.Command{
 			provider = providers.NewSflix(client)
 		} else if strings.EqualFold(cfg.Provider, "hdrezka") {
 			provider = providers.NewHDRezka(client)
+		} else if strings.EqualFold(cfg.Provider, "braflix") {
+			provider = providers.NewBraflix(client)
 		} else {
 			provider = providers.NewFlixHQ(client)
 		}
