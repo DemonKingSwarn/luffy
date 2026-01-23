@@ -3,8 +3,8 @@
 platform=$(uname -s)
 
 if [[ "$platform" == "Linux" ]]; then
-  go build -ldflags="-s -w" -o luffy
-  upx --best --lzma luffy
+  go build -ldflags="-s -w" -o luffy.amd64
+  upx --best --lzma luffy.amd64
 else
-  go build -o luffy
+  go build -o luffy-macos.aarch64
 fi
