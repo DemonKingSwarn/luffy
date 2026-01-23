@@ -9,7 +9,7 @@ fzf_path: fzf
 image_backend: sixel
 
 # Provider for anime sources (default: flixhq)
-# Options: flixhq, gogoanime, etc.
+# Options: flixhq, brocoflix, etc.
 provider: flixhq
 
 # Download path for saved videos (default: user's home directory)
