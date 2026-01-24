@@ -4,8 +4,12 @@
 # Path to fzf binary (default: fzf)
 fzf_path: fzf
 
+# change the video player
+# supported: mpv, vlc (default: mpv)
+player: mpv
+
 # Image backend for displaying images in terminal (default: sixel)
-# Options: sixel, kitty, iterm2, etc.
+# Options: sixel, kitty.
 image_backend: sixel
 
 # Provider for anime sources (default: flixhq)

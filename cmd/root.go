@@ -23,6 +23,7 @@ var (
 	backendFlag   string
 	cacheFlag     string
 	providerFlag  string
+	debugFlag     bool
 )
 
 const USER_AGENT = "luffy/1.0.8"
@@ -33,6 +34,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&actionFlag, "action", "a", "", "Action to perform (play, download)")
 	rootCmd.Flags().BoolVar(&showImageFlag, "show-image", false, "Show poster preview using chafa")
 	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", "Specify provider")
+	rootCmd.Flags().BoolVarP(&debugFlag, "debug", "d", false, "Enable debug output")
 
 	rootCmd.AddCommand(previewCmd)
 	previewCmd.Flags().StringVar(&backendFlag, "backend", "sixel", "Image backend")
@@ -49,6 +51,7 @@ var rootCmd = &cobra.Command{
 		client := core.NewClient()
 		ctx := &core.Context{
 			Client: client,
+			Debug:  debugFlag,
 		}
 
 		cfg := core.LoadConfig()
@@ -70,6 +73,8 @@ var rootCmd = &cobra.Command{
 			provider = providers.NewBrocoflix(client)
 		} else if strings.EqualFold(providerName, "xprime") {
 			provider = providers.NewXPrime(client)
+		} else if strings.EqualFold(providerName, "movies4u") {
+			provider = providers.NewMovies4u(client)
 		} else {
 			provider = providers.NewFlixHQ(client)
 		}
@@ -238,8 +243,12 @@ var rootCmd = &cobra.Command{
 				if !strings.HasPrefix(streamURL, "http") {
 					// Sometimes it might be missing http
 				}
+			} else if strings.EqualFold(providerName, "movies4u") {
+				streamURL = link
 			} else {
-				fmt.Println("Decrypting stream...")
+				if ctx.Debug {
+					fmt.Println("Decrypting stream...")
+				}
 				var decryptedReferer string
 				streamURL, subtitles, decryptedReferer, err = core.DecryptStream(link, ctx.Client)
 				if err != nil {
@@ -257,8 +266,10 @@ var rootCmd = &cobra.Command{
 
 			switch currentAction {
 			case "play":
-				fmt.Printf("Stream URL: %s\n", streamURL)
-				err = core.Play(streamURL, name, referer, USER_AGENT, subtitles)
+				if ctx.Debug {
+					fmt.Printf("Stream URL: %s\n", streamURL)
+				}
+				err = core.Play(streamURL, name, referer, USER_AGENT, subtitles, ctx.Debug)
 				if err != nil {
 					fmt.Println("Error playing:", err)
 				}
@@ -268,7 +279,7 @@ var rootCmd = &cobra.Command{
 				if dlPath == "" {
 					dlPath = homeDir
 				}
-				err = core.Download(homeDir, dlPath, name, streamURL, referer, USER_AGENT, subtitles)
+				err = core.Download(homeDir, dlPath, name, streamURL, referer, USER_AGENT, subtitles, ctx.Debug)
 				if err != nil {
 					fmt.Println("Error downloading:", err)
 				}

@@ -9,6 +9,7 @@ import (
 )
 
 var mpv_executable string = "mpv"
+var vlc_executable string = "vlc"
 
 func checkAndroid() bool {
 	cmd := exec.Command("uname", "-o")
@@ -19,12 +20,14 @@ func checkAndroid() bool {
 	return strings.TrimSpace(string(output)) == "Android"
 }
 
-func Play(url, title, referer, userAgent string, subtitles []string) error {
+func Play(url, title, referer, userAgent string, subtitles []string, debug bool) error {
 	
 	if runtime.GOOS == "windows" {
 		mpv_executable = "mpv.exe"
+		vlc_executable = "vlc.exe"
 	} else {
 		mpv_executable = "mpv"
+		vlc_executable = "vlc"
 	}
 
 	var cmd *exec.Cmd
@@ -48,7 +51,9 @@ func Play(url, title, referer, userAgent string, subtitles []string) error {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
-		fmt.Printf("Starting VLC on Android for %s...\n", title)
+		if debug {
+			fmt.Printf("Starting VLC on Android for %s...\n", title)
+		}
 		return cmd.Run()
 	}
 
@@ -70,11 +75,6 @@ func Play(url, title, referer, userAgent string, subtitles []string) error {
 	default:
 		cfg := LoadConfig()
 		if cfg.Player == "vlc" {
-			vlc_executable := "vlc"
-			if runtime.GOOS == "windows" {
-				vlc_executable = "vlc.exe"
-			}
-
 			args := []string{
 				url,
 				fmt.Sprintf("--http-referrer=%s", referer),
@@ -83,7 +83,6 @@ func Play(url, title, referer, userAgent string, subtitles []string) error {
 			}
 			for _, sub := range subtitles {
 				if sub != "" {
-					// Use --input-slave for remote subtitle URLs
 					if strings.HasPrefix(sub, "http://") || strings.HasPrefix(sub, "https://") {
 						args = append(args, fmt.Sprintf("--input-slave=%s", sub))
 					} else {
@@ -116,7 +115,7 @@ func Play(url, title, referer, userAgent string, subtitles []string) error {
 		cmd.Stderr = os.Stderr
 	}
 
-	if len(subtitles) > 0 {
+	if debug && len(subtitles) > 0 {
 		fmt.Printf("Subtitles found: %d\n", len(subtitles))
 	}
 

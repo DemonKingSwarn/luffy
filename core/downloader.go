@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func Download(basePath, dlPath, name, url, referer, userAgent string, subtitles []string) error {
+func Download(basePath, dlPath, name, url, referer, userAgent string, subtitles []string, debug bool) error {
 	if dlPath == "" {
 		dlPath = filepath.Join(basePath, "Downloads", "luffy")
 	} else {
@@ -35,7 +35,9 @@ func Download(basePath, dlPath, name, url, referer, userAgent string, subtitles 
 		"--user-agent", userAgent,
 	}
 
-	fmt.Printf("Downloading to %s...\n", outputTemplate)
+	if debug {
+		fmt.Printf("Downloading to %s...\n", outputTemplate)
+	}
 	cmd := exec.Command("yt-dlp", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -58,9 +60,13 @@ func Download(basePath, dlPath, name, url, referer, userAgent string, subtitles 
 				subPath += ".eng" + ext
 			}
 
-			fmt.Printf("Downloading subtitle to %s...\n", subPath)
+			if debug {
+				fmt.Printf("Downloading subtitle to %s...\n", subPath)
+			}
 			if err := downloadFile(subURL, subPath); err != nil {
-				fmt.Printf("Failed to download subtitle: %v\n", err)
+				if debug {
+					fmt.Printf("Failed to download subtitle: %v\n", err)
+				}
 			}
 		}
 	}

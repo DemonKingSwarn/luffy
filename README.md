@@ -89,7 +89,7 @@ scoop install luffy
 If you have Go installed, you can easily install Luffy:
 
 ```bash
-go install github.com/demonkingswarn/luffy@v1.0.9
+go install github.com/demonkingswarn/luffy@v1.0.10
 ```
 
 ### 6. Build from Source
@@ -113,15 +113,16 @@ Install termux [(Guide)](https://termux.com/)
 ```sh
 pkg up -y
 pkg in golang fzf python-yt-dlp
-go install github.com/demonkingswarn/luffy@v1.0.9
+go install github.com/demonkingswarn/luffy@v1.0.10
 ```
 
 
 # Dependencies
 
-- [`mpv`](https://mpv.io) - Video Player
+- [`mpv`](https://mpv.io) - Video Player for Linux and Windows
+- [`vlc`](https://www.videolan.org/vlc/) - Alternate video player for Linux and Windows
 - [`iina`](https://iina.io) - Alternate video player for MacOS
-- [`vlc`](https://play.google.com/store/apps/details?id=org.videolan.vlc) - Video Player for Android
+- [`vlc-android`](https://play.google.com/store/apps/details?id=org.videolan.vlc) - Video Player for Android
 - [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) - Download manager
 - [`fzf`](https://github.com/junegunn/fzf) - For selection menu
 - [`chafa`](https://github.com/hpjansson/chafa) & [`libsixel`](https://github.com/saitoha/libsixel) - For showing posters.
@@ -194,7 +195,7 @@ If you run into issues or want to request a new feature, you are encouraged to m
 
 # Providers
 
-Luffy uses three main providers, which you can easily change between by specifying them in the config file: `$HOME/.config/luffy/config.yaml`
+Luffy uses four main providers, which you can easily change between by specifying them in the config file: `$HOME/.config/luffy/config.yaml`
 
 - flixhq:
     ```yaml
@@ -207,6 +208,10 @@ Luffy uses three main providers, which you can easily change between by specifyi
 - xprime:
     ```yaml
     provider: xprime
+    ```
+- movies4u (bollywood only):
+    ```yaml
+    provider: movies4u
     ```
     **NOTE**: `brocoflix` & `xprime` doesn't return any subtitle urls, but their quality is much better.
 

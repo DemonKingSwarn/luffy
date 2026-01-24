@@ -23,4 +23,5 @@ type Context struct {
 
 	SelectedMedia []EpisodeData
 	PlayType      Action
+	Debug         bool
 }
