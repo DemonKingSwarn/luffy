@@ -26,7 +26,7 @@ var (
 	debugFlag     bool
 )
 
-const USER_AGENT = "luffy/1.0.8"
+const USER_AGENT = "luffy/1.0.11"
 
 func init() {
 	rootCmd.Flags().IntVarP(&seasonFlag, "season", "s", 0, "Specify season number")
