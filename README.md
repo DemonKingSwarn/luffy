@@ -196,7 +196,7 @@ If you run into issues or want to request a new feature, you are encouraged to m
 
 # Providers
 
-Luffy uses four main providers, which you can easily change between by specifying them in the config file: `$HOME/.config/luffy/config.yaml`
+Luffy uses six main providers, which you can easily change between by specifying them in the config file: `$HOME/.config/luffy/config.yaml`
 
 - flixhq:
     ```yaml
@@ -210,6 +210,15 @@ Luffy uses four main providers, which you can easily change between by specifyin
     ```yaml
     provider: xprime
     ```
+- sflix:
+    ```yaml
+    provider: sflix
+    ```
+
+- braflix:
+    ```yaml
+    provider: braflix
+    ```
 - movies4u (bollywood only):
     ```yaml
     provider: movies4u
@@ -220,17 +229,7 @@ Luffy uses four main providers, which you can easily change between by specifyin
     ```
     **NOTE**: `brocoflix` & `xprime` doesn't return any subtitle urls, but their quality is much better.
 
-There are three experimental providers, using these may not always work. These are:
-
-- sflix:
-    ```yaml
-    provider: sflix
-    ```
-
-- braflix:
-    ```yaml
-    provider: braflix
-    ```
+There are one experimental providers, using these may not always work. These are:
 
 - hdrezka:
     ```yaml

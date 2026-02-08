@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,7 +27,7 @@ var (
 	debugFlag     bool
 )
 
-const USER_AGENT = "luffy/1.0.12"
+const USER_AGENT = "luffy/1.0.13"
 
 func init() {
 	rootCmd.Flags().IntVarP(&seasonFlag, "season", "s", 0, "Specify season number")
@@ -261,7 +262,14 @@ var rootCmd = &cobra.Command{
 					referer = decryptedReferer
 				}
 
-				if strings.EqualFold(providerName, "sflix") || strings.EqualFold(providerName, "braflix") || strings.EqualFold(providerName, "xprime") {
+				if strings.EqualFold(providerName, "sflix") || strings.EqualFold(providerName, "braflix") {
+					// Use the main URL of the embed link as referrer
+					if parsedURL, err := url.Parse(link); err == nil {
+						referer = fmt.Sprintf("%s://%s/", parsedURL.Scheme, parsedURL.Host)
+					} else {
+						referer = link
+					}
+				} else if strings.EqualFold(providerName, "xprime") {
 					referer = link
 				}
 			}
