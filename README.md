@@ -48,6 +48,9 @@
 - [Support](#support)
 - [Providers](#providers)
 
+> [!NOTE]
+> Before creating an issue, make sure to update luffy using `luffy -u`. On Windows, it is recommended to only use scoop to update luffy.
+
 ## Installation
 
 ### 1. Arch Linux
@@ -107,7 +110,7 @@ Install termux [(Guide)](https://termux.com/)
 ```sh
 pkg up -y
 pkg in fzf python-yt-dlp
-curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.0.14/luffy-android-arm64" -o $PREFIX/bin/luffy
+curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.0.16/luffy-android-arm64" -o $PREFIX/bin/luffy
 chmod +x $PREFIX/bin/luffy
 ```
 
