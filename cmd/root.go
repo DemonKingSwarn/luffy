@@ -25,9 +25,10 @@ var (
 	cacheFlag     string
 	providerFlag  string
 	debugFlag     bool
+	updateFlag    bool
 )
 
-const USER_AGENT = "luffy/1.0.13"
+const USER_AGENT = "luffy/1.0.14"
 
 func init() {
 	rootCmd.Flags().IntVarP(&seasonFlag, "season", "s", 0, "Specify season number")
@@ -36,6 +37,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&showImageFlag, "show-image", false, "Show poster preview using chafa")
 	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", "Specify provider")
 	rootCmd.Flags().BoolVarP(&debugFlag, "debug", "d", false, "Enable debug output")
+	rootCmd.Flags().BoolVarP(&updateFlag, "update", "u", false, "Update Luffy")
 
 	rootCmd.AddCommand(previewCmd)
 	previewCmd.Flags().StringVar(&backendFlag, "backend", "sixel", "Image backend")
@@ -49,6 +51,11 @@ var rootCmd = &cobra.Command{
 	Args:    cobra.ArbitraryArgs,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if updateFlag {
+			core.Update()
+			return nil
+		}
+
 		client := core.NewClient()
 		ctx := &core.Context{
 			Client: client,
