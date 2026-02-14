@@ -67,7 +67,7 @@ func SelectWithPreview(label string, items []string, previewCmd string) int {
 		PromptString: &prompt,
 		Layout:       &layout,
 	}
-	
+
 	if previewCmd != "" {
 		opts.Preview = &previewCmd
 	}

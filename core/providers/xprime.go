@@ -50,7 +50,7 @@ func (x *XPrime) Search(query string) ([]core.SearchResult, error) {
 		if item.MediaType == "tv" {
 			title = item.Name
 		}
-		
+
 		poster := ""
 		if item.PosterPath != "" {
 			poster = "https://image.tmdb.org/t/p/w500" + item.PosterPath
@@ -188,7 +188,7 @@ func (x *XPrime) GetLink(serverID string) (string, error) {
 	serverName := parts[0]
 	mediaType := parts[1]
 	tmdbID := parts[2]
-	
+
 	season := ""
 	episode := ""
 	if mediaType == "series" && len(parts) >= 5 {
@@ -212,14 +212,14 @@ func (x *XPrime) GetLink(serverID string) (string, error) {
 		} else {
 			embedLink = fmt.Sprintf("https://multiembed.mov/?video_id=%s&tmdb=1&s=%s&e=%s", tmdbID, season, episode)
 		}
-	
+
 	case "vidlink":
 		if mediaType == "movie" {
 			embedLink = fmt.Sprintf("https://vidlink.pro/movie/%s", tmdbID)
 		} else {
 			embedLink = fmt.Sprintf("https://vidlink.pro/tv/%s/%s/%s", tmdbID, season, episode)
 		}
-	
+
 	case "embedsu":
 		if mediaType == "movie" {
 			embedLink = fmt.Sprintf("https://embed.su/embed/movie/%s", tmdbID)

@@ -35,7 +35,7 @@ func DownloadPoster(url string, title string) (string, error) {
 	// Sanitize filename
 	re := regexp.MustCompile(`[^a-zA-Z0-9]+`)
 	safeTitle := re.ReplaceAllString(title, "_")
-	
+
 	// Create a safe filename
 	filename := safeTitle + ".jpg" // Assuming jpg, but ideally check content-type or extension
 	fullPath := filepath.Join(cacheDir, filename)
@@ -49,7 +49,7 @@ func DownloadPoster(url string, title string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {

@@ -28,12 +28,12 @@ type DecryptResponse struct {
 }
 
 func DecryptStream(embedLink string, client *http.Client) (string, []string, string, error) {
-	if strings.Contains(embedLink, "vidsrc.xyz") || 
-	   strings.Contains(embedLink, "vidsrc.me") || 
-	   strings.Contains(embedLink, "vidsrc.to") || 
-	   strings.Contains(embedLink, "vidsrc.in") || 
-	   strings.Contains(embedLink, "vidsrc.pm") || 
-	   strings.Contains(embedLink, "vidsrc.net") {
+	if strings.Contains(embedLink, "vidsrc.xyz") ||
+		strings.Contains(embedLink, "vidsrc.me") ||
+		strings.Contains(embedLink, "vidsrc.to") ||
+		strings.Contains(embedLink, "vidsrc.in") ||
+		strings.Contains(embedLink, "vidsrc.pm") ||
+		strings.Contains(embedLink, "vidsrc.net") {
 		return DecryptVidsrc(embedLink, client)
 	}
 
@@ -61,7 +61,7 @@ func DecryptVidsrc(urlStr string, client *http.Client) (string, []string, string
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	
+
 	reCloud := regexp.MustCompile(`src="//cloudnestra\.com/rcp/([^"]+)"`)
 	match := reCloud.FindSubmatch(body)
 	if len(match) < 2 {
@@ -109,7 +109,7 @@ func DecryptVidsrc(urlStr string, client *http.Client) (string, []string, string
 	for _, p := range placeholders {
 		finalUrl = strings.ReplaceAll(finalUrl, p, "cloudnestra.com")
 	}
-	
+
 	if idx := strings.Index(finalUrl, " or "); idx != -1 {
 		finalUrl = finalUrl[:idx]
 	}
@@ -149,13 +149,13 @@ func DecryptVidlink(urlStr string, client *http.Client) (string, []string, strin
 	if len(matches) < 3 {
 		return "", nil, "", fmt.Errorf("could not parse vidlink url")
 	}
-	
+
 	tmdbID := matches[2]
 	subUrl := fmt.Sprintf("https://vidlink.pro/api/subtitles/%s", tmdbID)
-	
+
 	req, _ := http.NewRequest("GET", subUrl, nil)
 	resp, err := client.Do(req)
-	
+
 	var subs []string
 	if err == nil && resp.StatusCode == 200 {
 		var tracks []struct {

@@ -21,7 +21,7 @@ func checkAndroid() bool {
 }
 
 func Play(url, title, referer, userAgent string, subtitles []string, debug bool) error {
-	
+
 	if runtime.GOOS == "windows" {
 		mpv_executable = "mpv.exe"
 		vlc_executable = "vlc.exe"

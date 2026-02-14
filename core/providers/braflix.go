@@ -45,7 +45,7 @@ func (b *Braflix) Search(query string) ([]core.SearchResult, error) {
 	req, _ := b.newRequest("GET", searchURL, nil)
 	// Remove X-Requested-With for search page
 	req.Header.Del("X-Requested-With")
-	
+
 	resp, err := b.Client.Do(req)
 	if err != nil {
 		return nil, err
@@ -66,13 +66,13 @@ func (b *Braflix) Search(query string) ([]core.SearchResult, error) {
 		if poster == "" {
 			poster = s.Find("img.film-poster-img").AttrOr("src", "")
 		}
-		
+
 		// Type inference
 		mediaType := core.Movie
 		if strings.Contains(href, "/tv/") {
 			mediaType = core.Series
 		}
-		
+
 		info := s.Find("div.film-infor").Text()
 		year := ""
 		// Extract year from info if possible, usually first item
@@ -128,7 +128,7 @@ func (b *Braflix) GetMediaID(urlStr string) (string, error) {
 			return last, nil
 		}
 	}
-	
+
 	return "", errors.New("could not extract media id")
 }
 
@@ -205,7 +205,7 @@ func (b *Braflix) GetEpisodes(id string, isSeason bool) ([]core.Episode, error) 
 			if span := s.Find("span").Text(); span != "" {
 				name = strings.TrimSpace(span)
 			}
-			
+
 			if srvID != "" {
 				episodes = append(episodes, core.Episode{ID: srvID, Name: name})
 			}

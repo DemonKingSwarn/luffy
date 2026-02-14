@@ -14,9 +14,9 @@ func GetBestQualityM3U8(m3u8URL string, client *http.Client) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
@@ -33,7 +33,7 @@ func GetBestQualityM3U8(m3u8URL string, client *http.Client) (string, error) {
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
-	
+
 	var bestURL string
 	var maxBandwidth int
 	var maxResolution int
@@ -44,7 +44,7 @@ func GetBestQualityM3U8(m3u8URL string, client *http.Client) (string, error) {
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		
+
 		if strings.HasPrefix(line, "#EXT-X-STREAM-INF:") {
 			isVariant = true
 			currentBandwidth = 0
@@ -82,7 +82,7 @@ func GetBestQualityM3U8(m3u8URL string, client *http.Client) (string, error) {
 		if isVariant && line != "" {
 			// This is the URL line for the variant
 			isVariant = false
-			
+
 			// Simple heuristic: resolution > bandwidth
 			isBetter := false
 			if currentResolution > maxResolution {
@@ -96,7 +96,7 @@ func GetBestQualityM3U8(m3u8URL string, client *http.Client) (string, error) {
 			if isBetter || bestURL == "" {
 				maxResolution = currentResolution
 				maxBandwidth = currentBandwidth
-				
+
 				// Resolve relative URL
 				u, err := url.Parse(line)
 				if err == nil {

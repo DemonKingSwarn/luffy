@@ -109,7 +109,7 @@ func (m *Movies4u) GetEpisodes(id string, isSeason bool) ([]core.Episode, error)
 
 	doc.Find("h5").Each(func(i int, sel *goquery.Selection) {
 		text := strings.TrimSpace(sel.Text())
-		
+
 		var quality int
 		if strings.Contains(text, "1080p") {
 			quality = 3
@@ -122,7 +122,7 @@ func (m *Movies4u) GetEpisodes(id string, isSeason bool) ([]core.Episode, error)
 		if quality > 0 {
 			nextP := sel.NextFiltered("p")
 			link := nextP.Find("a").AttrOr("href", "")
-			
+
 			if link != "" && strings.Contains(link, "nexdrive.top") {
 				if quality > bestQuality {
 					bestQuality = quality
@@ -254,4 +254,3 @@ func (m *Movies4u) resolveHubCloudDownload(url string) (string, error) {
 
 	return m.resolveFinalLink(downloadLink)
 }
-

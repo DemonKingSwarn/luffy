@@ -50,7 +50,7 @@ func (b *Brocoflix) Search(query string) ([]core.SearchResult, error) {
 		if item.MediaType == "tv" {
 			title = item.Name
 		}
-		
+
 		poster := ""
 		if item.PosterPath != "" {
 			poster = "https://image.tmdb.org/t/p/w500" + item.PosterPath
@@ -82,7 +82,7 @@ func (b *Brocoflix) GetMediaID(urlStr string) (string, error) {
 	q := u.Query()
 	id := q.Get("id")
 	mediaType := q.Get("type")
-	
+
 	if id == "" || mediaType == "" {
 		return "", fmt.Errorf("invalid url")
 	}
@@ -131,7 +131,7 @@ func (b *Brocoflix) GetSeasons(mediaID string) ([]core.Season, error) {
 
 func (b *Brocoflix) GetEpisodes(id string, isSeason bool) ([]core.Episode, error) {
 	if !isSeason {
-		
+
 		servers := []core.Server{
 			{Name: "VidSrc", ID: "vidsrc:" + id},
 			{Name: "MultiEmbed", ID: "multiembed:" + id},
@@ -199,7 +199,7 @@ func (b *Brocoflix) GetLink(serverID string) (string, error) {
 	serverName := parts[0]
 	mediaType := parts[1]
 	tmdbID := parts[2]
-	
+
 	season := ""
 	episode := ""
 	if mediaType == "series" && len(parts) >= 5 {
@@ -223,14 +223,14 @@ func (b *Brocoflix) GetLink(serverID string) (string, error) {
 		} else {
 			embedLink = fmt.Sprintf("https://multiembed.mov/?video_id=%s&tmdb=1&s=%s&e=%s", tmdbID, season, episode)
 		}
-	
+
 	case "vidlink":
 		if mediaType == "movie" {
 			embedLink = fmt.Sprintf("https://vidlink.pro/movie/%s", tmdbID)
 		} else {
 			embedLink = fmt.Sprintf("https://vidlink.pro/tv/%s/%s/%s", tmdbID, season, episode)
 		}
-	
+
 	case "embedsu":
 		if mediaType == "movie" {
 			embedLink = fmt.Sprintf("https://embed.su/embed/movie/%s", tmdbID)

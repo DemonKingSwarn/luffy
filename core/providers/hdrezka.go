@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	HDREZKA_BASE_URL = "https://hdrezka.website"
-	HDREZKA_AJAX_URL = "https://hdrezka.website/ajax/get_cdn_series/"
+	HDREZKA_BASE_URL       = "https://hdrezka.website"
+	HDREZKA_AJAX_URL       = "https://hdrezka.website/ajax/get_cdn_series/"
 	HDREZKA_AJAX_MOVIE_URL = "https://hdrezka.website/ajax/get_cdn_movie/"
 )
 
@@ -69,16 +69,16 @@ func (h *HDRezka) Search(query string) ([]core.SearchResult, error) {
 		misc := s.Find("div.misc").Text()
 
 		mediaType := core.Movie
-		if strings.Contains(s.Find("span.cat").AttrOr("class", ""), "series") || 
-		   strings.Contains(s.Find("span.cat").AttrOr("class", ""), "cartoons") || 
-		   strings.Contains(s.Find("span.cat").AttrOr("class", ""), "animation") {
+		if strings.Contains(s.Find("span.cat").AttrOr("class", ""), "series") ||
+			strings.Contains(s.Find("span.cat").AttrOr("class", ""), "cartoons") ||
+			strings.Contains(s.Find("span.cat").AttrOr("class", ""), "animation") {
 			if strings.Contains(s.Find("span.info").Text(), "сезон") || strings.Contains(s.Find("span.info").Text(), "серия") {
 				mediaType = core.Series
 			}
 		}
-        if s.Find("span.cat.series").Length() > 0 {
-            mediaType = core.Series
-        }
+		if s.Find("span.cat.series").Length() > 0 {
+			mediaType = core.Series
+		}
 
 		if href != "" {
 			results = append(results, core.SearchResult{
@@ -99,9 +99,9 @@ func (h *HDRezka) Search(query string) ([]core.SearchResult, error) {
 }
 
 func (h *HDRezka) GetMediaID(urlStr string) (string, error) {
-    if strings.HasPrefix(urlStr, "/") {
-        urlStr = HDREZKA_BASE_URL + urlStr
-    }
+	if strings.HasPrefix(urlStr, "/") {
+		urlStr = HDREZKA_BASE_URL + urlStr
+	}
 	return urlStr, nil
 }
 
@@ -135,200 +135,200 @@ func (h *HDRezka) GetSeasons(mediaID string) ([]core.Season, error) {
 }
 
 func (h *HDRezka) GetEpisodes(id string, isSeason bool) ([]core.Episode, error) {
-    parts := strings.Split(id, "|")
-    if len(parts) < 2 {
-        return nil, errors.New("invalid id format")
-    }
-    urlStr := parts[0]
-    seasonID := parts[1]
+	parts := strings.Split(id, "|")
+	if len(parts) < 2 {
+		return nil, errors.New("invalid id format")
+	}
+	urlStr := parts[0]
+	seasonID := parts[1]
 
-    req, _ := h.newRequest("GET", urlStr, nil)
-    resp, err := h.Client.Do(req)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
+	req, _ := h.newRequest("GET", urlStr, nil)
+	resp, err := h.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-    doc, err := goquery.NewDocumentFromReader(resp.Body)
-    if err != nil {
-        return nil, err
-    }
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 
-    var episodes []core.Episode
-    listSelector := fmt.Sprintf("ul#simple-episodes-list-%s li", seasonID)
-    
-    doc.Find(listSelector).Each(func(i int, s *goquery.Selection) {
-        epId := s.AttrOr("data-episode_id", "")
-        name := strings.TrimSpace(s.Text())
-        if epId == "" {
-            epId = strconv.Itoa(i + 1)
-        }
-        compositeID := fmt.Sprintf("%s|%s|%s", urlStr, seasonID, epId)
-        episodes = append(episodes, core.Episode{ID: compositeID, Name: name})
-    })
-    
-    if len(episodes) == 0 {
-        compositeID := fmt.Sprintf("%s|%s|%s", urlStr, "1", "1")
-        episodes = append(episodes, core.Episode{ID: compositeID, Name: "Full Movie"})
-    }
+	var episodes []core.Episode
+	listSelector := fmt.Sprintf("ul#simple-episodes-list-%s li", seasonID)
 
-    return episodes, nil
+	doc.Find(listSelector).Each(func(i int, s *goquery.Selection) {
+		epId := s.AttrOr("data-episode_id", "")
+		name := strings.TrimSpace(s.Text())
+		if epId == "" {
+			epId = strconv.Itoa(i + 1)
+		}
+		compositeID := fmt.Sprintf("%s|%s|%s", urlStr, seasonID, epId)
+		episodes = append(episodes, core.Episode{ID: compositeID, Name: name})
+	})
+
+	if len(episodes) == 0 {
+		compositeID := fmt.Sprintf("%s|%s|%s", urlStr, "1", "1")
+		episodes = append(episodes, core.Episode{ID: compositeID, Name: "Full Movie"})
+	}
+
+	return episodes, nil
 }
 
 func (h *HDRezka) GetServers(episodeID string) ([]core.Server, error) {
-    parts := strings.Split(episodeID, "|")
-    if len(parts) < 3 {
-        return nil, errors.New("invalid episode id")
-    }
-    urlStr := parts[0]
-    season := parts[1]
-    episode := parts[2]
+	parts := strings.Split(episodeID, "|")
+	if len(parts) < 3 {
+		return nil, errors.New("invalid episode id")
+	}
+	urlStr := parts[0]
+	season := parts[1]
+	episode := parts[2]
 
-    req, _ := h.newRequest("GET", urlStr, nil)
-    resp, err := h.Client.Do(req)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
+	req, _ := h.newRequest("GET", urlStr, nil)
+	resp, err := h.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-    doc, err := goquery.NewDocumentFromReader(resp.Body)
-    if err != nil {
-        return nil, err
-    }
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 
-    var servers []core.Server
-    doc.Find("ul#translators-list li").Each(func(i int, s *goquery.Selection) {
-        tID := s.AttrOr("data-translator_id", "")
-        name := strings.TrimSpace(s.Text())
-        if s.HasClass("b-prem_translator") {
-            name += " (Premium)"
-        }
-        
-        if tID != "" {
-            srvID := fmt.Sprintf("%s|%s|%s|%s", urlStr, season, episode, tID)
-            servers = append(servers, core.Server{ID: srvID, Name: name})
-        }
-    })
+	var servers []core.Server
+	doc.Find("ul#translators-list li").Each(func(i int, s *goquery.Selection) {
+		tID := s.AttrOr("data-translator_id", "")
+		name := strings.TrimSpace(s.Text())
+		if s.HasClass("b-prem_translator") {
+			name += " (Premium)"
+		}
 
-    if len(servers) == 0 {
-        html, _ := doc.Html()
-        re := regexp.MustCompile(`initCDNSeriesEvents\(\d+,\s*(\d+)`)
-        matches := re.FindStringSubmatch(html)
-        if len(matches) > 1 {
-            tID := matches[1]
-            srvID := fmt.Sprintf("%s|%s|%s|%s", urlStr, season, episode, tID)
-            servers = append(servers, core.Server{ID: srvID, Name: "Default"})
-        } else {
-             reMovie := regexp.MustCompile(`initCDNMoviesEvents\(\d+,\s*(\d+)`)
-             matchesMovie := reMovie.FindStringSubmatch(html)
-             if len(matchesMovie) > 1 {
-                 tID := matchesMovie[1]
-                 srvID := fmt.Sprintf("%s|%s|%s|%s", urlStr, season, episode, tID)
-                 servers = append(servers, core.Server{ID: srvID, Name: "Default"})
-             }
-        }
-    }
+		if tID != "" {
+			srvID := fmt.Sprintf("%s|%s|%s|%s", urlStr, season, episode, tID)
+			servers = append(servers, core.Server{ID: srvID, Name: name})
+		}
+	})
 
-    return servers, nil
+	if len(servers) == 0 {
+		html, _ := doc.Html()
+		re := regexp.MustCompile(`initCDNSeriesEvents\(\d+,\s*(\d+)`)
+		matches := re.FindStringSubmatch(html)
+		if len(matches) > 1 {
+			tID := matches[1]
+			srvID := fmt.Sprintf("%s|%s|%s|%s", urlStr, season, episode, tID)
+			servers = append(servers, core.Server{ID: srvID, Name: "Default"})
+		} else {
+			reMovie := regexp.MustCompile(`initCDNMoviesEvents\(\d+,\s*(\d+)`)
+			matchesMovie := reMovie.FindStringSubmatch(html)
+			if len(matchesMovie) > 1 {
+				tID := matchesMovie[1]
+				srvID := fmt.Sprintf("%s|%s|%s|%s", urlStr, season, episode, tID)
+				servers = append(servers, core.Server{ID: srvID, Name: "Default"})
+			}
+		}
+	}
+
+	return servers, nil
 }
 
 func (h *HDRezka) GetLink(serverID string) (string, error) {
-    parts := strings.Split(serverID, "|")
-    if len(parts) < 4 {
-        return "", errors.New("invalid server id")
-    }
-    urlStr := parts[0]
-    season := parts[1]
-    episode := parts[2]
-    translatorID := parts[3]
+	parts := strings.Split(serverID, "|")
+	if len(parts) < 4 {
+		return "", errors.New("invalid server id")
+	}
+	urlStr := parts[0]
+	season := parts[1]
+	episode := parts[2]
+	translatorID := parts[3]
 
-    re := regexp.MustCompile(`\/(\d+)-`)
-    matches := re.FindStringSubmatch(urlStr)
-    if len(matches) < 2 {
-        return "", errors.New("could not extract id from url")
-    }
-    id := matches[1]
+	re := regexp.MustCompile(`\/(\d+)-`)
+	matches := re.FindStringSubmatch(urlStr)
+	if len(matches) < 2 {
+		return "", errors.New("could not extract id from url")
+	}
+	id := matches[1]
 
-    action := "get_stream"
-    endpoint := HDREZKA_AJAX_URL
-    
-    if strings.Contains(urlStr, "/films/") {
-        action = "get_movie_stream"
-        endpoint = HDREZKA_AJAX_MOVIE_URL
-    }
-    
-    vals := url.Values{}
-    vals.Set("id", id)
-    vals.Set("translator_id", translatorID)
-    vals.Set("action", action)
-    
-    if action == "get_stream" {
-        vals.Set("season", season)
-        vals.Set("episode", episode)
-    }
+	action := "get_stream"
+	endpoint := HDREZKA_AJAX_URL
 
-    req, _ := h.newRequest("POST", endpoint, strings.NewReader(vals.Encode()))
-    req.Header.Set("Referer", urlStr)
-    
-    resp, err := h.Client.Do(req)
-    if err != nil {
-        return "", err
-    }
-    defer resp.Body.Close()
+	if strings.Contains(urlStr, "/films/") {
+		action = "get_movie_stream"
+		endpoint = HDREZKA_AJAX_MOVIE_URL
+	}
 
-    var res struct {
-        Success bool   `json:"success"`
-        Message string `json:"message"`
-        URL     string `json:"url"`
-    }
-    
-    body, _ := io.ReadAll(resp.Body)
-    if err := json.Unmarshal(body, &res); err != nil {
-        return "", fmt.Errorf("json error: %v body: %s", err, string(body))
-    }
+	vals := url.Values{}
+	vals.Set("id", id)
+	vals.Set("translator_id", translatorID)
+	vals.Set("action", action)
 
-    if !res.Success {
-        if action == "get_stream" {
-             vals.Set("action", "get_movie_stream")
-             req, _ := h.newRequest("POST", HDREZKA_AJAX_MOVIE_URL, strings.NewReader(vals.Encode()))
-             req.Header.Set("Referer", urlStr)
-             resp2, err := h.Client.Do(req)
-             if err == nil {
-                 defer resp2.Body.Close()
-                 body2, _ := io.ReadAll(resp2.Body)
-                 json.Unmarshal(body2, &res)
-             }
-        }
-    }
+	if action == "get_stream" {
+		vals.Set("season", season)
+		vals.Set("episode", episode)
+	}
 
-    if !res.Success {
-        return "", fmt.Errorf("api error: %s", res.Message)
-    }
+	req, _ := h.newRequest("POST", endpoint, strings.NewReader(vals.Encode()))
+	req.Header.Set("Referer", urlStr)
 
-    return h.Decode(res.URL), nil
+	resp, err := h.Client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var res struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+		URL     string `json:"url"`
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &res); err != nil {
+		return "", fmt.Errorf("json error: %v body: %s", err, string(body))
+	}
+
+	if !res.Success {
+		if action == "get_stream" {
+			vals.Set("action", "get_movie_stream")
+			req, _ := h.newRequest("POST", HDREZKA_AJAX_MOVIE_URL, strings.NewReader(vals.Encode()))
+			req.Header.Set("Referer", urlStr)
+			resp2, err := h.Client.Do(req)
+			if err == nil {
+				defer resp2.Body.Close()
+				body2, _ := io.ReadAll(resp2.Body)
+				json.Unmarshal(body2, &res)
+			}
+		}
+	}
+
+	if !res.Success {
+		return "", fmt.Errorf("api error: %s", res.Message)
+	}
+
+	return h.Decode(res.URL), nil
 }
 
 func (h *HDRezka) Decode(data string) string {
-    if strings.HasPrefix(data, "#h") {
-        data = data[2:]
-    }
-    
-    chunks := strings.Split(data, "//_//")
-    var valid strings.Builder
-    
-    for _, chunk := range chunks {
-        decoded, err := base64.StdEncoding.DecodeString(chunk)
-        if err != nil {
-            continue
-        }
-        
-        decodedStr := string(decoded)
-        if strings.ContainsAny(decodedStr, "#!@$^%") {
-            continue
-        }
-        
-        valid.WriteString(decodedStr)
-    }
-    
-    return valid.String()
+	if strings.HasPrefix(data, "#h") {
+		data = data[2:]
+	}
+
+	chunks := strings.Split(data, "//_//")
+	var valid strings.Builder
+
+	for _, chunk := range chunks {
+		decoded, err := base64.StdEncoding.DecodeString(chunk)
+		if err != nil {
+			continue
+		}
+
+		decodedStr := string(decoded)
+		if strings.ContainsAny(decodedStr, "#!@$^%") {
+			continue
+		}
+
+		valid.WriteString(decodedStr)
+	}
+
+	return valid.String()
 }
