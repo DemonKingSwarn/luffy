@@ -44,3 +44,6 @@ freebsd-386:   (_build "freebsd" "386")
 
 clean:
     rm -rf {{build_dir}}
+
+test:
+    go test ./... -v
