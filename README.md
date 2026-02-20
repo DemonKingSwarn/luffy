@@ -24,11 +24,11 @@
 <img src="https://img.shields.io/badge/os-android-brightgreen" alt="OS Android">
 
 <br>
-</div>
 
 
 <a href="https://discord.gg/JF85vTkDyC"><img src="https://invidget.switchblade.xyz/JF85vTkDyC"></a><a href="https://matrix.to/#/#swarn-discord:chat.demonkingswarn.live"><img src="./.assets/matrix-logo.svg"></a>
 
+</div>
 <br>
 
 ---
