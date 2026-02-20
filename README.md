@@ -193,19 +193,11 @@ If you run into issues or want to request a new feature, you are encouraged to m
 
 # Providers
 
-Luffy uses six main providers, which you can easily change between by specifying them in the config file: `$HOME/.config/luffy/config.yaml`
+Luffy uses five main providers, which you can easily change between by specifying them in the config file: `$HOME/.config/luffy/config.yaml`
 
 - flixhq:
     ```yaml
     provider: flixhq
-    ```
-- brocoflix:
-    ```yaml
-    provider: brocoflix
-    ```
-- xprime:
-    ```yaml
-    provider: xprime
     ```
 - sflix:
     ```yaml

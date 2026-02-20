@@ -15,7 +15,6 @@ const (
 	FLIXHQ_BASE_URL   = "https://flixhq.to"
 	FLIXHQ_SEARCH_URL = FLIXHQ_BASE_URL + "/search"
 	FLIXHQ_AJAX_URL   = FLIXHQ_BASE_URL + "/ajax"
-	DECODER           = "https://dec.eatmynerds.live"
 	TMDB_API_KEY      = "653bb8af90162bd98fc7ee32bcbbfb3d"
 	TMDB_BASE_URL     = "https://api.themoviedb.org/3"
 )

@@ -76,10 +76,6 @@ var rootCmd = &cobra.Command{
 			provider = providers.NewHDRezka(client)
 		} else if strings.EqualFold(providerName, "braflix") {
 			provider = providers.NewBraflix(client)
-		} else if strings.EqualFold(providerName, "brocoflix") {
-			provider = providers.NewBrocoflix(client)
-		} else if strings.EqualFold(providerName, "xprime") {
-			provider = providers.NewXPrime(client)
 		} else if strings.EqualFold(providerName, "movies4u") {
 			provider = providers.NewMovies4u(client)
 		} else if strings.EqualFold(providerName, "youtube") {

@@ -245,7 +245,11 @@ func (b *Braflix) GetServers(episodeID string) ([]core.Server, error) {
 }
 
 func (b *Braflix) GetLink(serverID string) (string, error) {
-	urlStr := fmt.Sprintf("%s/episode/sources/%s", BRAFLIX_AJAX_URL, serverID)
+	id := serverID
+	if idx := strings.Index(id, "|"); idx != -1 {
+		id = id[:idx]
+	}
+	urlStr := fmt.Sprintf("%s/episode/sources/%s", BRAFLIX_AJAX_URL, id)
 	req, _ := b.newRequest("GET", urlStr, nil)
 	resp, err := b.Client.Do(req)
 	if err != nil {

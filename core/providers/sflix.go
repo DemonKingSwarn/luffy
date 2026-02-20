@@ -322,7 +322,11 @@ func (s *Sflix) fetchServersWithMediaID(episodeID string, mediaID string, mediaT
 }
 
 func (s *Sflix) GetLink(serverID string) (string, error) {
-	url := fmt.Sprintf("%s/episode/sources/%s", SFLIX_AJAX_URL, serverID)
+	id := serverID
+	if idx := strings.Index(id, "|"); idx != -1 {
+		id = id[:idx]
+	}
+	url := fmt.Sprintf("%s/episode/sources/%s", SFLIX_AJAX_URL, id)
 	req, _ := s.newRequest("GET", url)
 	resp, err := s.Client.Do(req)
 	if err != nil {

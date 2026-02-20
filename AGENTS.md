@@ -4,7 +4,7 @@
 
 **Luffy** is a CLI tool for streaming/downloading movies and TV shows from online providers. Written in Go 1.25.
 
-**Key Features**: Search/stream from flixhq, sflix, braflix, brocoflix, xprime, movies4u, hdrezka, youtube. Interactive fzf selection. MPV/VLC/IINA support. yt-dlp downloads. Cross-platform (Linux, macOS, Windows, Android, FreeBSD).
+**Key Features**: Search/stream from flixhq, sflix, braflix, movies4u, hdrezka, youtube. Interactive fzf selection. MPV/VLC/IINA support. yt-dlp downloads. Cross-platform (Linux, macOS, Windows, Android, FreeBSD).
 
 ## Build/Lint/Test Commands
 
@@ -49,15 +49,13 @@ luffy/
 │   ├── provider.go          # Provider interface
 │   ├── types.go             # Core types (SearchResult, Season, Episode, Server)
 │   ├── config.go            # Config management (YAML at ~/.config/luffy/config.yaml)
-│   ├── decrypt.go           # M3U8 stream extraction
+│   ├── decrypt.go           # M3U8 stream extraction (local decryption)
 │   ├── player.go            # Video player integration
 │   ├── http.go              # HTTP client helpers
 │   └── providers/           # Provider implementations
 │       ├── flixhq.go        # Default provider
 │       ├── sflix.go
 │       ├── braflix.go
-│       ├── brocoflix.go
-│       ├── xprime.go
 │       ├── movies4u.go      # Bollywood only
 │       ├── hdrezka.go       # Experimental
 │       └── youtube.go
@@ -77,6 +75,54 @@ type Provider interface {
     GetLink(serverID string) (string, error)
 }
 ```
+
+## Stream Decryption (core/decrypt.go)
+
+All stream decryption is done locally without external services. The `DecryptStream` function routes to specific decryptors based on URL patterns:
+
+### Supported Embedders
+
+| Embedder | Function | Notes |
+|----------|----------|-------|
+| `videostr.net` | `DecryptMegacloud` | Used by sflix, braflix |
+| `streameeeeee.site` | `DecryptMegacloud` | Used by flixhq |
+| `streamaaa.top` | `DecryptMegacloud` | Alternative |
+| `megacloud.*` | `DecryptMegacloud` | Megacloud player |
+| `embed.su` | `DecryptEmbedSu` | Embed.su player |
+| `vidlink.pro` | `DecryptVidlink` | AES-256 encrypted API |
+| `multiembed.mov` | `DecryptMultiembed` | Hunter obfuscation decoder |
+| `vidsrc.*` | `DecryptVidsrc` | Cloudnestra-based |
+| Other | `DecryptGeneric` | Regex-based fallback |
+
+### Megacloud Decryption Flow
+
+1. Fetch embed page HTML
+2. Extract client key from HTML (multiple patterns):
+   - `<meta name="_gg_fb" content="...">`
+   - `window._xy_ws = "..."`
+   - `window._lk_db = {x: "...", y: "...", z: "..."}`
+   - `<div data-dpi="...">`
+3. Fetch Megacloud key from public GitHub repo
+4. Call API: `/embed-1/v3/e-1/getSources?id={videoID}&_k={clientKey}`
+5. If encrypted, decrypt using 3-layer algorithm
+6. Return m3u8 URL and subtitles
+
+### Client Key Extraction Patterns
+
+```go
+patterns := []string{
+    `<meta\s+name="_gg_fb"\s+content="([^"]+)"`,
+    `window\._xy_ws\s*=\s*"([^"]+)"`,
+    `window\._lk_db\s*=\s*\{[^}]*x:\s*"([^"]+)"[^}]*y:\s*"([^"]+)"[^}]*z:\s*"([^"]+)"`,
+    `<div[^>]+data-dpi="([^"]+)"`,
+}
+```
+
+### Adding New Embedder Support
+
+1. Add URL pattern check in `DecryptStream()`
+2. Implement decrypt function following existing patterns
+3. Extract m3u8 URL from embed page or API response
 
 ## Code Conventions
 
@@ -209,18 +255,17 @@ if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 return res.Link, nil
 ```
 
-### MediaID Context Pattern (sflix/braflix)
+### Server ID Stripping Pattern
 
-Format: `"id|mediaID"` to pass media type context:
+For sflix and braflix, server IDs may include context suffixes (`|movie`, `|series`) that must be stripped before API calls:
 ```go
-func (p *Provider) GetEpisodes(id string, isSeason bool) ([]core.Episode, error) {
-    parts := strings.Split(id, "|")
-    actualID := parts[0]
-    mediaID := ""
-    if len(parts) == 2 {
-        mediaID = parts[1]
+func (s *Sflix) GetLink(serverID string) (string, error) {
+    id := serverID
+    if idx := strings.Index(id, "|"); idx != -1 {
+        id = id[:idx]
     }
-    // Use actualID for API calls, append mediaID to returned episode IDs
+    url := fmt.Sprintf("%s/episode/sources/%s", SFLIX_AJAX_URL, id)
+    // ...
 }
 ```
 
@@ -268,6 +313,7 @@ if strings.EqualFold(providerName, "sflix") || strings.EqualFold(providerName, "
 - **Follow existing patterns** - Consistency across providers
 - **Default provider** is flixhq
 - **Config location**: `~/.config/luffy/config.yaml`
+- **All decryption is local** - No external services used
 
 ## Dependencies
 
