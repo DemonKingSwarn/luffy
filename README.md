@@ -26,6 +26,9 @@
 <br>
 </div>
 
+
+<a href="https://discord.gg/JF85vTkDyC"><img src="https://invidget.switchblade.xyz/JF85vTkDyC"></a><a href="https://matrix.to/#/#swarn-discord:chat.demonkingswarn.live"><img src="./.assets/matrix-logo.svg"></a>
+
 <br>
 
 ---
@@ -110,7 +113,7 @@ Install termux [(Guide)](https://termux.com/)
 ```sh
 pkg up -y
 pkg in fzf python-yt-dlp
-curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.0.18/luffy-android-arm64" -o $PREFIX/bin/luffy
+curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.0.19/luffy-android-arm64" -o $PREFIX/bin/luffy
 chmod +x $PREFIX/bin/luffy
 ```
 
@@ -188,14 +191,6 @@ Skip the quality selection prompt and play in the highest available quality:
 ```bash
 luffy "dune" --best
 ```
-
-
-# Support
-You can contact the developer directly via this <a href="mailto:swarn@demonkingswarn.live">email</a>. However, the most recommended way is to head to the discord server.
-
-<a href="https://discord.gg/JF85vTkDyC"><img src="https://invidget.switchblade.xyz/JF85vTkDyC"></a>
-
-If you run into issues or want to request a new feature, you are encouraged to make a GitHub issue, won't bite you, trust me.
 
 
 # Providers
