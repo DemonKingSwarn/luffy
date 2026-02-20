@@ -9,37 +9,46 @@ import (
 	"strings"
 )
 
-func GetBestQualityM3U8(m3u8URL string, client *http.Client) (string, error) {
+type Quality struct {
+	URL        string
+	Resolution string
+	Bandwidth  int
+	Height     int
+	Label      string
+}
+
+func GetQualities(m3u8URL string, client *http.Client, referer string) ([]Quality, string, error) {
 	req, err := http.NewRequest("GET", m3u8URL, nil)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("failed to fetch m3u8: %d", resp.StatusCode)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, "", fmt.Errorf("failed to fetch m3u8: %d", resp.StatusCode)
 	}
 
 	baseURL, err := url.Parse(m3u8URL)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
 
-	var bestURL string
-	var maxBandwidth int
-	var maxResolution int
-
+	var qualities []Quality
 	var currentBandwidth int
-	var currentResolution int
+	var currentResolution string
+	var currentHeight int
 	var isVariant bool
 
 	for scanner.Scan() {
@@ -48,9 +57,9 @@ func GetBestQualityM3U8(m3u8URL string, client *http.Client) (string, error) {
 		if strings.HasPrefix(line, "#EXT-X-STREAM-INF:") {
 			isVariant = true
 			currentBandwidth = 0
-			currentResolution = 0
+			currentResolution = ""
+			currentHeight = 0
 
-			// Parse BANDWIDTH
 			if strings.Contains(line, "BANDWIDTH=") {
 				parts := strings.Split(line, "BANDWIDTH=")
 				if len(parts) > 1 {
@@ -59,16 +68,14 @@ func GetBestQualityM3U8(m3u8URL string, client *http.Client) (string, error) {
 				}
 			}
 
-			// Parse RESOLUTION
 			if strings.Contains(line, "RESOLUTION=") {
 				parts := strings.Split(line, "RESOLUTION=")
 				if len(parts) > 1 {
 					val := strings.Split(parts[1], ",")[0]
 					resParts := strings.Split(val, "x")
 					if len(resParts) == 2 {
-						w, _ := strconv.Atoi(resParts[0])
-						h, _ := strconv.Atoi(resParts[1])
-						currentResolution = w * h
+						currentResolution = val
+						currentHeight, _ = strconv.Atoi(resParts[1])
 					}
 				}
 			}
@@ -80,39 +87,72 @@ func GetBestQualityM3U8(m3u8URL string, client *http.Client) (string, error) {
 		}
 
 		if isVariant && line != "" {
-			// This is the URL line for the variant
 			isVariant = false
 
-			// Simple heuristic: resolution > bandwidth
-			isBetter := false
-			if currentResolution > maxResolution {
-				isBetter = true
-			} else if currentResolution == maxResolution {
-				if currentBandwidth > maxBandwidth {
-					isBetter = true
-				}
+			label := currentResolution
+			if label == "" {
+				label = formatBandwidth(currentBandwidth)
 			}
 
-			if isBetter || bestURL == "" {
-				maxResolution = currentResolution
-				maxBandwidth = currentBandwidth
-
-				// Resolve relative URL
-				u, err := url.Parse(line)
-				if err == nil {
-					bestURL = baseURL.ResolveReference(u).String()
-				} else {
-					bestURL = line // Fallback
-				}
+			resolvedURL := line
+			u, err := url.Parse(line)
+			if err == nil {
+				resolvedURL = baseURL.ResolveReference(u).String()
 			}
+
+			qualities = append(qualities, Quality{
+				URL:        resolvedURL,
+				Resolution: currentResolution,
+				Bandwidth:  currentBandwidth,
+				Height:     currentHeight,
+				Label:      label,
+			})
 		}
 	}
 
-	if bestURL != "" {
-		return bestURL, nil
+	if len(qualities) > 0 {
+		return qualities, "", nil
 	}
 
-	// If no variants found, it might be a simple media playlist or parsing failed
-	// Return original URL
-	return m3u8URL, nil
+	return nil, m3u8URL, nil
+}
+
+func formatBandwidth(bandwidth int) string {
+	if bandwidth >= 1000000 {
+		return fmt.Sprintf("%.1f Mbps", float64(bandwidth)/1000000)
+	}
+	return fmt.Sprintf("%.0f Kbps", float64(bandwidth)/1000)
+}
+
+func GetBestQuality(qualities []Quality) Quality {
+	if len(qualities) == 0 {
+		return Quality{}
+	}
+
+	best := qualities[0]
+	for _, q := range qualities[1:] {
+		if q.Height > best.Height || (q.Height == best.Height && q.Bandwidth > best.Bandwidth) {
+			best = q
+		}
+	}
+	return best
+}
+
+func SelectQuality(qualities []Quality, selectBest bool) (string, error) {
+	if len(qualities) == 0 {
+		return "", fmt.Errorf("no qualities available")
+	}
+
+	if selectBest || len(qualities) == 1 {
+		best := GetBestQuality(qualities)
+		return best.URL, nil
+	}
+
+	var labels []string
+	for _, q := range qualities {
+		labels = append(labels, q.Label)
+	}
+
+	idx := Select("Quality:", labels)
+	return qualities[idx].URL, nil
 }

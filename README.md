@@ -48,8 +48,8 @@
 - [Support](#support)
 - [Providers](#providers)
 
-> [!NOTE]
-> Before creating an issue, make sure to update luffy.
+ > [!NOTE] 
+ > Before creating an issue, make sure to update luffy
 
 ## Installation
 
@@ -86,7 +86,7 @@ scoop install luffy
 If you have Go installed, you can easily install Luffy:
 
 ```bash
-go install github.com/demonkingswarn/luffy@v1.0.17
+go install github.com/demonkingswarn/luffy@latest
 ```
 
 ### 5. Build from Source
@@ -110,7 +110,7 @@ Install termux [(Guide)](https://termux.com/)
 ```sh
 pkg up -y
 pkg in fzf python-yt-dlp
-curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.0.17/luffy-android-arm64" -o $PREFIX/bin/luffy
+curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.0.18/luffy-android-arm64" -o $PREFIX/bin/luffy
 chmod +x $PREFIX/bin/luffy
 ```
 
@@ -152,6 +152,7 @@ luffy [query] [flags]
 | `--action` | `-a` | Action to perform: `play` (default) or `download`. |
 | `--season` | `-s` | (Series only) Specify the season number. |
 | `--episodes` | `-e` | (Series only) Specify a single episode (`5`) or a range (`1-5`). |
+| `--best` | `-b` | Auto-select the best available quality (skips fzf quality prompt). |
 | `--help` | `-h` | Show help message and exit. |
 | `--show-image` | NA | Show posters preview. |
 | `--providers` | `-p` | Select provider. |
@@ -180,6 +181,12 @@ luffy "breaking bad" -s 1 -e 1
 Download episodes 1 through 5 of Season 2:
 ```bash
 luffy "stranger things" -s 2 -e 1-5 -a download
+```
+
+**Auto-select Best Quality**
+Skip the quality selection prompt and play in the highest available quality:
+```bash
+luffy "dune" --best
 ```
 
 

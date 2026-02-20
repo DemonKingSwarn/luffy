@@ -13,6 +13,7 @@ type Config struct {
 	ImageBackend string `yaml:"image_backend"`
 	Provider     string `yaml:"provider"`
 	DlPath       string `yaml:"dl_path"`
+	Quality      string `yaml:"quality"`
 }
 
 func LoadConfig() *Config {
@@ -22,6 +23,7 @@ func LoadConfig() *Config {
 		ImageBackend: "sixel",  // Default image backend
 		Provider:     "flixhq", // Default provider
 		DlPath:       "",       // Default: use home directory
+		Quality:      "",       // Default: prompt user to select quality
 	}
 
 	home, err := os.UserHomeDir()
@@ -39,13 +41,13 @@ func LoadConfig() *Config {
 	// Parse YAML into config struct
 	err = yaml.Unmarshal(data, config)
 	if err != nil {
-		// YAML parsing failed, return defaults
 		return &Config{
 			FzfPath:      "fzf",
 			Player:       "mpv",
 			ImageBackend: "sixel",
 			Provider:     "flixhq",
 			DlPath:       "",
+			Quality:      "",
 		}
 	}
 

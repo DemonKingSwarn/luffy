@@ -25,7 +25,7 @@ var (
 	cacheFlag     string
 	providerFlag  string
 	debugFlag     bool
-	updateFlag    bool
+	bestFlag      bool
 )
 
 const USER_AGENT = "luffy/1.0.14"
@@ -37,7 +37,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&showImageFlag, "show-image", false, "Show poster preview using chafa")
 	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", "Specify provider")
 	rootCmd.Flags().BoolVarP(&debugFlag, "debug", "d", false, "Enable debug output")
-	rootCmd.Flags().BoolVarP(&updateFlag, "update", "u", false, "Update Luffy")
+	rootCmd.Flags().BoolVarP(&bestFlag, "best", "b", false, "Auto-select best quality")
 
 	rootCmd.AddCommand(previewCmd)
 	previewCmd.Flags().StringVar(&backendFlag, "backend", "sixel", "Image backend")
@@ -51,10 +51,6 @@ var rootCmd = &cobra.Command{
 	Args:    cobra.ArbitraryArgs,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if updateFlag {
-			return core.Update()
-		}
-
 		client := core.NewClient()
 		ctx := &core.Context{
 			Client: client,
@@ -283,16 +279,30 @@ var rootCmd = &cobra.Command{
 
 			if strings.Contains(streamURL, ".m3u8") {
 				if ctx.Debug {
-					fmt.Println("Checking for best quality stream...")
+					fmt.Println("Fetching available qualities...")
+					fmt.Printf("Master m3u8 URL: %s\n", streamURL)
+					fmt.Printf("Referer: %s\n", referer)
 				}
-				best, err := core.GetBestQualityM3U8(streamURL, ctx.Client)
-				if err == nil {
-					if ctx.Debug && best != streamURL {
-						fmt.Printf("Upgraded quality: %s\n", best)
+				qualities, directURL, err := core.GetQualities(streamURL, ctx.Client, referer)
+				if err != nil {
+					if ctx.Debug {
+						fmt.Printf("Failed to parse m3u8: %v\n", err)
 					}
-					streamURL = best
-				} else if ctx.Debug {
-					fmt.Printf("Failed to parse m3u8: %v\n", err)
+				} else if len(qualities) > 0 {
+					if ctx.Debug {
+						fmt.Printf("Found %d quality variants\n", len(qualities))
+					}
+					selectBest := bestFlag || strings.EqualFold(cfg.Quality, "best")
+					streamURL, err = core.SelectQuality(qualities, selectBest)
+					if err != nil {
+						fmt.Printf("Quality selection failed: %v\n", err)
+						return err
+					}
+					if ctx.Debug {
+						fmt.Printf("Selected quality URL: %s\n", streamURL)
+					}
+				} else if directURL != "" {
+					streamURL = directURL
 				}
 			}
 
