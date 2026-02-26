@@ -54,6 +54,8 @@ luffy/
 │   ├── config.go            # Config management (YAML at ~/.config/luffy/config.yaml)
 │   ├── decrypt.go           # M3U8 stream extraction (local decryption)
 │   ├── m3u8.go              # Quality selection from master m3u8 playlists
+│   ├── history.go           # SQLite watch history (OpenHistory, AddEntry, ListShows)
+│   ├── recommend.go         # Taste-profile recommendation engine
 │   ├── player.go            # Video player integration
 │   ├── http.go              # HTTP client helpers
 │   └── providers/           # Provider implementations
@@ -63,6 +65,8 @@ luffy/
 │       ├── movies4u.go      # Bollywood only
 │       ├── hdrezka.go       # Experimental
 │       └── youtube.go
+├── docs/
+│   └── recommendation.md    # Recommendation engine documentation
 └── main.go                  # Entry point
 ```
 
@@ -77,6 +81,99 @@ type Provider interface {
     GetEpisodes(id string, isSeason bool) ([]Episode, error)
     GetServers(episodeID string) ([]Server, error)
     GetLink(serverID string) (string, error)
+}
+```
+
+## Watch History (core/history.go)
+
+History is stored in a SQLite database at `~/.config/luffy/history.sqlite` using the CGO-free driver `modernc.org/sqlite`.
+
+### Schema
+
+```sql
+CREATE TABLE history (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    title      TEXT    NOT NULL,
+    season     INTEGER NOT NULL DEFAULT 0,  -- 0 for movies
+    episode    INTEGER NOT NULL DEFAULT 0,  -- 0 for movies
+    ep_name    TEXT    NOT NULL DEFAULT '',
+    url        TEXT    NOT NULL,            -- provider media URL (used to resume)
+    provider   TEXT    NOT NULL DEFAULT '',
+    watched_at DATETIME NOT NULL
+)
+```
+
+### Key Types and Functions
+
+```go
+type HistoryEntry struct {
+    Title     string
+    Season    int       // 0 for movies
+    Episode   int       // 0 for movies
+    EpName    string
+    URL       string
+    Provider  string
+    WatchedAt time.Time
+}
+
+type ShowSummary struct {
+    Title    string
+    URL      string
+    Provider string
+    Season   int
+    Episode  int
+    EpName   string
+    WatchedAt time.Time
+}
+
+func OpenHistory() (*DB, error)               // opens or creates the DB
+func (db *DB) AddEntry(e HistoryEntry) error  // insert one record
+func (db *DB) ListShows() ([]ShowSummary, error) // one row per (title,url), newest first
+func FormatShowLabel(s ShowSummary) string    // fzf display label
+```
+
+### Important: Episode Number Tracking
+
+`core.Episode` has no `Number` field. The correct 1-based episode number within a season must be tracked externally using the `episodeWithNum` struct defined in `cmd/root.go`:
+
+```go
+type episodeWithNum struct {
+    num int        // 1-based episode number within the season
+    ep  core.Episode
+}
+```
+
+- **fzf single-select**: episode number = `eIdx + 1` (index into `allEpisodes`)
+- **`-e` flag range**: episode number = `i` from `ParseEpisodeRange` (already 1-based)
+
+Never use `epIdx + 1` from the `episodesToProcess` loop — that re-indexes from 0 and is wrong when episodes are a subset of the season.
+
+## Recommendation Engine (core/recommend.go)
+
+See `docs/recommendation.md` for full details.
+
+### Summary
+
+`GetRecommendations(client *http.Client) ([]Recommendation, error)` builds a **taste profile** from watch history and returns up to 50 scored, ranked recommendations.
+
+**Algorithm:**
+1. Load history; assign each show a recency weight (`2^(-age/30days)`).
+2. Fetch TMDB genre IDs and keyword IDs for each show; accumulate into weighted frequency maps.
+3. Derive the top 3 genres and query `/discover/movie` and `/discover/tv` filtered to those genres.
+4. Score each candidate: `Σ(genre_weight) + 0.5 × Σ(keyword_weight)` for profile matches.
+5. Exclude already-watched titles, sort by score descending, return top 50.
+6. Falls back to the simple `/recommendations` endpoint if TMDB lookups all fail.
+
+### Key Types
+
+```go
+type Recommendation struct {
+    Title     string
+    MediaType MediaType
+    Year      string
+    Overview  string
+    TmdbID    int
+    Score     float64  // relevance score, higher is better
 }
 ```
 
@@ -381,302 +478,18 @@ if strings.EqualFold(providerName, "sflix") || strings.EqualFold(providerName, "
 - **Follow existing patterns** - Consistency across providers
 - **Default provider** is flixhq
 - **Config location**: `~/.config/luffy/config.yaml`
+- **History DB**: `~/.config/luffy/history.sqlite` — CGO-free (`modernc.org/sqlite`)
 - **All decryption is local** - No external services used
 - **Quality default is fzf prompt** - `cfg.Quality` defaults to `""`, not `"best"`. Only `--best` flag or explicit `quality: best` in config bypasses the prompt
 - **Always pass Referer to GetQualities** - CDNs enforce Referer; missing it silently breaks quality selection
+- **Episode numbers** - Never use loop index `epIdx+1` from `episodesToProcess`; use `episodeWithNum.num` which carries the correct number from the selection point
 
 ## Dependencies
 
 - `github.com/PuerkitoBio/goquery` - HTML parsing
 - `github.com/spf13/cobra` - CLI framework
 - `gopkg.in/yaml.v3` - Config parsing
-
-## Resources
-
-- GitHub: https://github.com/demonkingswarn/luffy
-- Discord: https://discord.gg/JF85vTkDyC
-
-
-## Architecture
-
-```
-luffy/
-├── cmd/root.go              # CLI entry point (cobra commands)
-├── core/
-│   ├── provider.go          # Provider interface
-│   ├── types.go             # Core types (SearchResult, Season, Episode, Server)
-│   ├── config.go            # Config management (YAML at ~/.config/luffy/config.yaml)
-│   ├── decrypt.go           # M3U8 stream extraction (local decryption)
-│   ├── player.go            # Video player integration
-│   ├── http.go              # HTTP client helpers
-│   └── providers/           # Provider implementations
-│       ├── flixhq.go        # Default provider
-│       ├── sflix.go
-│       ├── braflix.go
-│       ├── movies4u.go      # Bollywood only
-│       ├── hdrezka.go       # Experimental
-│       └── youtube.go
-└── main.go                  # Entry point
-```
-
-## Provider Interface
-
-All providers implement `core.Provider`:
-```go
-type Provider interface {
-    Search(query string) ([]SearchResult, error)
-    GetMediaID(url string) (string, error)
-    GetSeasons(mediaID string) ([]Season, error)
-    GetEpisodes(id string, isSeason bool) ([]Episode, error)
-    GetServers(episodeID string) ([]Server, error)
-    GetLink(serverID string) (string, error)
-}
-```
-
-## Stream Decryption (core/decrypt.go)
-
-All stream decryption is done locally without external services. The `DecryptStream` function routes to specific decryptors based on URL patterns:
-
-### Supported Embedders
-
-| Embedder | Function | Notes |
-|----------|----------|-------|
-| `videostr.net` | `DecryptMegacloud` | Used by sflix, braflix |
-| `streameeeeee.site` | `DecryptMegacloud` | Used by flixhq |
-| `streamaaa.top` | `DecryptMegacloud` | Alternative |
-| `megacloud.*` | `DecryptMegacloud` | Megacloud player |
-| `embed.su` | `DecryptEmbedSu` | Embed.su player |
-| `vidlink.pro` | `DecryptVidlink` | AES-256 encrypted API |
-| `multiembed.mov` | `DecryptMultiembed` | Hunter obfuscation decoder |
-| `vidsrc.*` | `DecryptVidsrc` | Cloudnestra-based |
-| Other | `DecryptGeneric` | Regex-based fallback |
-
-### Megacloud Decryption Flow
-
-1. Fetch embed page HTML
-2. Extract client key from HTML (multiple patterns):
-   - `<meta name="_gg_fb" content="...">`
-   - `window._xy_ws = "..."`
-   - `window._lk_db = {x: "...", y: "...", z: "..."}`
-   - `<div data-dpi="...">`
-3. Fetch Megacloud key from public GitHub repo
-4. Call API: `/embed-1/v3/e-1/getSources?id={videoID}&_k={clientKey}`
-5. If encrypted, decrypt using 3-layer algorithm
-6. Return m3u8 URL and subtitles
-
-### Client Key Extraction Patterns
-
-```go
-patterns := []string{
-    `<meta\s+name="_gg_fb"\s+content="([^"]+)"`,
-    `window\._xy_ws\s*=\s*"([^"]+)"`,
-    `window\._lk_db\s*=\s*\{[^}]*x:\s*"([^"]+)"[^}]*y:\s*"([^"]+)"[^}]*z:\s*"([^"]+)"`,
-    `<div[^>]+data-dpi="([^"]+)"`,
-}
-```
-
-### Adding New Embedder Support
-
-1. Add URL pattern check in `DecryptStream()`
-2. Implement decrypt function following existing patterns
-3. Extract m3u8 URL from embed page or API response
-
-## Code Conventions
-
-### Imports
-
-- Standard library first, then third-party, then internal
-- Group imports logically
-```go
-import (
-    "encoding/json"
-    "fmt"
-    "net/http"
-    "strings"
-
-    "github.com/PuerkitoBio/goquery"
-    "github.com/spf13/cobra"
-
-    "github.com/demonkingswarn/luffy/core"
-)
-```
-
-### Formatting & Types
-
-- Use `gofmt` for consistent formatting
-- Use descriptive struct field names, JSON tags for API responses
-```go
-type SearchResult struct {
-    Title  string
-    URL    string
-    Type   MediaType  // Movie or Series
-    Poster string
-    Year   string
-}
-```
-
-### Naming Conventions
-
-- **Constants**: UPPER_SNAKE_CASE (`FLIXHQ_BASE_URL`)
-- **Public structs**: PascalCase (`FlixHQ`, `YouTube`)
-- **Private structs**: PascalCase (`DecryptedSource`)
-- **Receiver names**: Single lowercase letter matching type first letter (`f *FlixHQ`, `s *Sflix`)
-- **Functions**: PascalCase for exported (`NewFlixHQ`), camelCase for private
-- **Variables**: camelCase (`mediaType`, `searchURL`)
-
-### Error Handling
-
-- Always return errors from HTTP operations
-- Wrap errors with context using `fmt.Errorf("context: %w", err)`
-- Return descriptive errors for empty results
-```go
-resp, err := p.Client.Do(req)
-if err != nil {
-    return nil, fmt.Errorf("failed to fetch data: %w", err)
-}
-defer resp.Body.Close()
-
-if len(results) == 0 {
-    return nil, errors.New("no results")
-}
-```
-
-### Provider Implementation Pattern
-
-```go
-package providers
-
-const (
-    PROVIDER_BASE_URL = "https://example.com"
-    PROVIDER_AJAX_URL = PROVIDER_BASE_URL + "/ajax"
-)
-
-type ProviderName struct {
-    Client *http.Client
-}
-
-func NewProviderName(client *http.Client) *ProviderName {
-    return &ProviderName{Client: client}
-}
-
-func (p *ProviderName) newRequest(method, url string) (*http.Request, error) {
-    req, err := core.NewRequest(method, url)
-    if err != nil {
-        return nil, err
-    }
-    req.Header.Set("Referer", PROVIDER_BASE_URL+"/")
-    return req, nil
-}
-```
-
-### HTTP Request Pattern
-
-```go
-func (p *Provider) Search(query string) ([]core.SearchResult, error) {
-    search := strings.ReplaceAll(query, " ", "-")
-    req, _ := p.newRequest("GET", PROVIDER_SEARCH_URL+"/"+search)
-    resp, err := p.Client.Do(req)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
-    // Parse response...
-}
-```
-
-### HTML Parsing with goquery
-
-```go
-doc, err := goquery.NewDocumentFromReader(resp.Body)
-if err != nil {
-    return nil, err
-}
-
-doc.Find("div.flw-item").Each(func(i int, sel *goquery.Selection) {
-    title := sel.Find("h2.film-name a").AttrOr("title", "Unknown")
-    href := sel.Find("div.film-poster a").AttrOr("href", "")
-    // Process item...
-})
-```
-
-### JSON Response Parsing
-
-```go
-var res struct {
-    Type string `json:"type"`
-    Link string `json:"link"`
-}
-if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-    return "", err
-}
-return res.Link, nil
-```
-
-### Server ID Stripping Pattern
-
-For sflix and braflix, server IDs may include context suffixes (`|movie`, `|series`) that must be stripped before API calls:
-```go
-func (s *Sflix) GetLink(serverID string) (string, error) {
-    id := serverID
-    if idx := strings.Index(id, "|"); idx != -1 {
-        id = id[:idx]
-    }
-    url := fmt.Sprintf("%s/episode/sources/%s", SFLIX_AJAX_URL, id)
-    // ...
-}
-```
-
-## Common Patterns
-
-### Debug Output
-```go
-if ctx.Debug {
-    fmt.Printf("Fetching URL: %s\n", url)
-}
-```
-
-### HTTP Headers
-- `User-Agent`: Set via `core.NewRequest()` or manually
-- `Referer`: Set to provider base URL in `newRequest()`
-- `X-Requested-With`: Set to "XMLHttpRequest" for AJAX calls
-
-### Special Provider Handling
-
-**sflix and braflix** need dynamic referrer in `cmd/root.go`:
-```go
-if strings.EqualFold(providerName, "sflix") || strings.EqualFold(providerName, "braflix") {
-    if parsedURL, err := url.Parse(link); err == nil {
-        referer = fmt.Sprintf("%s://%s/", parsedURL.Scheme, parsedURL.Host)
-    }
-}
-```
-
-## Adding a New Provider
-
-1. Create `core/providers/newprovider.go` implementing `Provider` interface
-2. Add to switch statement in `cmd/root.go`:
-```go
-} else if strings.EqualFold(providerName, "newprovider") {
-    provider = providers.NewNewProvider(client)
-}
-```
-3. Update `README.md` with the new provider
-
-## Important Notes
-
-- **Never commit secrets** - No API keys in code
-- **Respect rate limits** - Add delays if needed
-- **Handle edge cases** - Empty results, network errors
-- **Follow existing patterns** - Consistency across providers
-- **Default provider** is flixhq
-- **Config location**: `~/.config/luffy/config.yaml`
-- **All decryption is local** - No external services used
-
-## Dependencies
-
-- `github.com/PuerkitoBio/goquery` - HTML parsing
-- `github.com/spf13/cobra` - CLI framework
-- `gopkg.in/yaml.v3` - Config parsing
+- `modernc.org/sqlite` - CGO-free SQLite driver (required — all builds use `CGO_ENABLED=0`)
 
 ## Resources
 
