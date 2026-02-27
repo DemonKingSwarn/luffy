@@ -164,17 +164,25 @@ var rootCmd = &cobra.Command{
 
 			var episodesToProcess []episodeWithNum
 			selectedSeasonNum := 0
+			// allEpisodesInSeason holds every episode in the chosen season (used for
+			// Next/Previous navigation in playback controls). Only set for Series.
+			var allEpisodesInSeason []episodeWithNum
+			selectedEpisodeIdx := 0 // index into allEpisodesInSeason for the starting ep
 
 			if ctx.ContentType == core.Series {
 				var selectedSeason core.Season
+				var sIdx int
 				if chosen.Season > 0 && chosen.Season <= len(seasons) {
-					fmt.Printf("Last watched: Season %d, Episode %d\n", chosen.Season, chosen.Episode)
+					// Auto-select the last-watched season; only prompt for episode.
+					sIdx = chosen.Season - 1
+					fmt.Printf("Resuming Season %d (last watched: S%02dE%02d)\n", chosen.Season, chosen.Season, chosen.Episode)
+				} else {
+					var sNames []string
+					for _, s := range seasons {
+						sNames = append(sNames, s.Name)
+					}
+					sIdx = core.Select("Seasons:", sNames)
 				}
-				var sNames []string
-				for _, s := range seasons {
-					sNames = append(sNames, s.Name)
-				}
-				sIdx := core.Select("Seasons:", sNames)
 				selectedSeason = seasons[sIdx]
 				selectedSeasonNum = sIdx + 1
 
@@ -191,7 +199,11 @@ var rootCmd = &cobra.Command{
 					eNames = append(eNames, e.Name)
 				}
 				eIdx := core.Select("Episodes:", eNames)
-				episodesToProcess = append(episodesToProcess, episodeWithNum{num: eIdx + 1, ep: allEpisodes[eIdx]})
+				selectedEpisodeIdx = eIdx
+				for i, e := range allEpisodes {
+					allEpisodesInSeason = append(allEpisodesInSeason, episodeWithNum{num: i + 1, ep: e})
+				}
+				episodesToProcess = append(episodesToProcess, allEpisodesInSeason[eIdx])
 
 			} else {
 				servers, err := histProvider.GetEpisodes(mediaID, false)
@@ -210,8 +222,6 @@ var rootCmd = &cobra.Command{
 				currentAction = actions[actIdx]
 			}
 			currentAction = strings.ToLower(currentAction)
-
-			processStream := buildProcessStream(ctx, cfg, histProviderName, currentAction, histDB, debugFlag, bestFlag)
 
 			if ctx.ContentType == core.Movie {
 				fmt.Printf("\nProcessing: %s\n", ctx.Title)
@@ -233,9 +243,28 @@ var rootCmd = &cobra.Command{
 				if err != nil {
 					return fmt.Errorf("error getting link: %v", err)
 				}
+				if currentAction == "play" {
+					streamURL, referer, subtitles, err := resolveStreamURL(link, ctx, cfg, histProviderName, ctx.Title, debugFlag, bestFlag)
+					if err != nil {
+						return err
+					}
+					action, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag)
+					if err != nil {
+						return err
+					}
+					if action == core.PlaybackQuit {
+						saveHistory(histDB, ctx, histProviderName, 0, 0, "", debugFlag)
+					}
+					return nil
+				}
+				processStream := buildProcessStream(ctx, cfg, histProviderName, currentAction, histDB, debugFlag, bestFlag)
 				return processStream(link, ctx.Title, 0, 0, "")
 			}
 
+			if currentAction == "play" {
+				return playSeriesWithControls(allEpisodesInSeason, selectedEpisodeIdx, selectedSeasonNum, histProvider, ctx, cfg, histProviderName, histDB, debugFlag, bestFlag)
+			}
+			processStream := buildProcessStream(ctx, cfg, histProviderName, currentAction, histDB, debugFlag, bestFlag)
 			for _, ewn := range episodesToProcess {
 				ep := ewn.ep
 				fmt.Printf("\nProcessing: %s\n", ep.Name)
@@ -284,7 +313,34 @@ var rootCmd = &cobra.Command{
 			for i, r := range recs {
 				labels[i] = core.FormatRecommendLabel(r)
 			}
-			rIdx := core.Select("Recommendations:", labels)
+
+			var rIdx int
+			if showImageFlag {
+				fmt.Println("Downloading recommendation posters...")
+				var wg sync.WaitGroup
+				for _, r := range recs {
+					if r.PosterPath == "" {
+						continue
+					}
+					wg.Add(1)
+					go func(posterURL, title string) {
+						defer wg.Done()
+						core.DownloadPoster(posterURL, title)
+					}(core.TMDB_IMAGE_BASE_URL+r.PosterPath, r.Title)
+				}
+				wg.Wait()
+
+				rcfg := core.LoadConfig()
+				cacheDir, _ := core.GetCacheDir()
+				exe, _ := os.Executable()
+				exeFwd := strings.ReplaceAll(exe, `\`, `/`)
+				cacheDirFwd := strings.ReplaceAll(cacheDir, `\`, `/`)
+				previewCmd := fmt.Sprintf("%s preview --backend %s --cache %s {}", exeFwd, rcfg.ImageBackend, cacheDirFwd)
+				rIdx = core.SelectWithPreview("Recommendations:", labels, previewCmd)
+				go core.CleanCache()
+			} else {
+				rIdx = core.Select("Recommendations:", labels)
+			}
 			chosen := recs[rIdx]
 
 			fmt.Printf("Searching for \"%s\" on %s...\n", chosen.Title, providerName)
@@ -320,6 +376,8 @@ var rootCmd = &cobra.Command{
 
 			var episodesToProcess []episodeWithNum
 			selectedSeasonNum := 0
+			var allEpisodesInSeason []episodeWithNum
+			selectedEpisodeIdx := 0
 
 			if ctx.ContentType == core.Series {
 				seasons, err := provider.GetSeasons(mediaID)
@@ -349,7 +407,11 @@ var rootCmd = &cobra.Command{
 					eNames = append(eNames, e.Name)
 				}
 				eIdx := core.Select("Episodes:", eNames)
-				episodesToProcess = append(episodesToProcess, episodeWithNum{num: eIdx + 1, ep: allEpisodes[eIdx]})
+				selectedEpisodeIdx = eIdx
+				for i, e := range allEpisodes {
+					allEpisodesInSeason = append(allEpisodesInSeason, episodeWithNum{num: i + 1, ep: e})
+				}
+				episodesToProcess = append(episodesToProcess, allEpisodesInSeason[eIdx])
 
 			} else {
 				servers, err := provider.GetEpisodes(mediaID, false)
@@ -368,8 +430,6 @@ var rootCmd = &cobra.Command{
 				currentAction = actions[actIdx]
 			}
 			currentAction = strings.ToLower(currentAction)
-
-			processStream := buildProcessStream(ctx, cfg, providerName, currentAction, histDB, debugFlag, bestFlag)
 
 			if ctx.ContentType == core.Movie {
 				fmt.Printf("\nProcessing: %s\n", ctx.Title)
@@ -391,9 +451,28 @@ var rootCmd = &cobra.Command{
 				if err != nil {
 					return fmt.Errorf("error getting link: %v", err)
 				}
+				if currentAction == "play" {
+					streamURL, referer, subtitles, err := resolveStreamURL(link, ctx, cfg, providerName, ctx.Title, debugFlag, bestFlag)
+					if err != nil {
+						return err
+					}
+					action, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag)
+					if err != nil {
+						return err
+					}
+					if action == core.PlaybackQuit {
+						saveHistory(histDB, ctx, providerName, 0, 0, "", debugFlag)
+					}
+					return nil
+				}
+				processStream := buildProcessStream(ctx, cfg, providerName, currentAction, histDB, debugFlag, bestFlag)
 				return processStream(link, ctx.Title, 0, 0, "")
 			}
 
+			if currentAction == "play" {
+				return playSeriesWithControls(allEpisodesInSeason, selectedEpisodeIdx, selectedSeasonNum, provider, ctx, cfg, providerName, histDB, debugFlag, bestFlag)
+			}
+			processStream := buildProcessStream(ctx, cfg, providerName, currentAction, histDB, debugFlag, bestFlag)
 			for _, ewn := range episodesToProcess {
 				ep := ewn.ep
 				fmt.Printf("\nProcessing: %s\n", ep.Name)
@@ -497,6 +576,10 @@ var rootCmd = &cobra.Command{
 
 		// Track season number for history.
 		selectedSeasonNum := 0
+		// allEpisodesInSeason and selectedEpisodeIdx are used by the playback
+		// controls loop to enable Next/Previous navigation within the season.
+		var allEpisodesInSeason []episodeWithNum
+		selectedEpisodeIdx := 0
 
 		if ctx.ContentType == core.Series {
 			seasons, err := provider.GetSeasons(mediaID)
@@ -532,6 +615,11 @@ var rootCmd = &cobra.Command{
 				return fmt.Errorf("no episodes found")
 			}
 
+			// Build the full list with correct 1-based episode numbers.
+			for i, e := range allEpisodes {
+				allEpisodesInSeason = append(allEpisodesInSeason, episodeWithNum{num: i + 1, ep: e})
+			}
+
 			if episodeFlag != "" {
 				indices, err := core.ParseEpisodeRange(episodeFlag)
 				if err != nil {
@@ -544,13 +632,18 @@ var rootCmd = &cobra.Command{
 					}
 					episodesToProcess = append(episodesToProcess, episodeWithNum{num: i, ep: allEpisodes[i-1]})
 				}
+				// When an explicit range is given, start playback at the first episode in the range.
+				if len(episodesToProcess) > 0 {
+					selectedEpisodeIdx = episodesToProcess[0].num - 1
+				}
 			} else {
 				var eNames []string
 				for _, e := range allEpisodes {
 					eNames = append(eNames, e.Name)
 				}
 				eIdx := core.Select("Episodes:", eNames)
-				episodesToProcess = append(episodesToProcess, episodeWithNum{num: eIdx + 1, ep: allEpisodes[eIdx]})
+				selectedEpisodeIdx = eIdx
+				episodesToProcess = append(episodesToProcess, allEpisodesInSeason[eIdx])
 			}
 
 		} else {
@@ -570,8 +663,6 @@ var rootCmd = &cobra.Command{
 			currentAction = actions[actIdx]
 		}
 		currentAction = strings.ToLower(currentAction)
-
-		processStream := buildProcessStream(ctx, cfg, providerName, currentAction, histDB, debugFlag, bestFlag)
 
 		if ctx.ContentType == core.Movie {
 			fmt.Printf("\nProcessing: %s\n", ctx.Title)
@@ -597,12 +688,32 @@ var rootCmd = &cobra.Command{
 				return fmt.Errorf("error getting link: %v", err)
 			}
 
+			if currentAction == "play" {
+				streamURL, referer, subtitles, err := resolveStreamURL(link, ctx, cfg, providerName, ctx.Title, debugFlag, bestFlag)
+				if err != nil {
+					return err
+				}
+				action, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag)
+				if err != nil {
+					return err
+				}
+				if action == core.PlaybackQuit {
+					saveHistory(histDB, ctx, providerName, 0, 0, "", debugFlag)
+				}
+				return nil
+			}
+			processStream := buildProcessStream(ctx, cfg, providerName, currentAction, histDB, debugFlag, bestFlag)
 			if err := processStream(link, ctx.Title, 0, 0, ""); err != nil {
 				return err
 			}
 
 		} else {
-			// Series Processing
+			// Series: use interactive playback controls for play, or plain loop for download.
+			if currentAction == "play" {
+				return playSeriesWithControls(allEpisodesInSeason, selectedEpisodeIdx, selectedSeasonNum, provider, ctx, cfg, providerName, histDB, debugFlag, bestFlag)
+			}
+			// Download path: process only the selected episode(s).
+			processStream := buildProcessStream(ctx, cfg, providerName, currentAction, histDB, debugFlag, bestFlag)
 			for _, ewn := range episodesToProcess {
 				ep := ewn.ep
 				fmt.Printf("\nProcessing: %s\n", ep.Name)
@@ -643,6 +754,143 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+// resolveStreamURL takes a raw provider link and returns the final playable
+// stream URL, the referer to use, and any subtitle URLs.
+func resolveStreamURL(
+	link string,
+	ctx *core.Context,
+	cfg *core.Config,
+	providerName string,
+	name string,
+	debugMode bool,
+	best bool,
+) (streamURL, referer string, subtitles []string, err error) {
+	referer = link
+	if strings.EqualFold(providerName, "hdrezka") {
+		referer = ctx.URL
+	}
+
+	if strings.EqualFold(providerName, "hdrezka") {
+		streams := strings.Split(link, ",")
+		bestQuality := 0
+		for _, s := range streams {
+			s = strings.TrimSpace(s)
+			if strings.HasPrefix(s, "[") {
+				end := strings.Index(s, "]")
+				if end > 1 {
+					qualityStr := s[1:end]
+					qualityStr = strings.TrimSuffix(qualityStr, "p")
+					q, _ := strconv.Atoi(qualityStr)
+					if q > bestQuality {
+						bestQuality = q
+						streamURL = s[end+1:]
+					}
+				}
+			} else {
+				if streamURL == "" {
+					streamURL = s
+				}
+			}
+		}
+		if streamURL == "" {
+			streamURL = link
+		}
+	} else if strings.EqualFold(providerName, "movies4u") || strings.EqualFold(providerName, "youtube") {
+		streamURL = link
+	} else {
+		if debugMode {
+			fmt.Println("Decrypting stream...")
+		}
+		var decryptedReferer string
+		streamURL, subtitles, decryptedReferer, err = core.DecryptStream(link, ctx.Client)
+		if err != nil {
+			fmt.Printf("Decryption failed for %s: %v\n", name, err)
+			return
+		}
+		if decryptedReferer != "" {
+			referer = decryptedReferer
+		}
+
+		if strings.EqualFold(providerName, "sflix") || strings.EqualFold(providerName, "braflix") {
+			if parsedURL, parseErr := url.Parse(link); parseErr == nil {
+				referer = fmt.Sprintf("%s://%s/", parsedURL.Scheme, parsedURL.Host)
+			} else {
+				referer = link
+			}
+		}
+	}
+
+	if strings.Contains(streamURL, ".m3u8") {
+		if debugMode {
+			fmt.Println("Fetching available qualities...")
+			fmt.Printf("Master m3u8 URL: %s\n", streamURL)
+			fmt.Printf("Referer: %s\n", referer)
+		}
+		qualities, directURL, qErr := core.GetQualities(streamURL, ctx.Client, referer)
+		if qErr != nil {
+			if debugMode {
+				fmt.Printf("Failed to parse m3u8: %v\n", qErr)
+			}
+		} else if len(qualities) > 0 {
+			if debugMode {
+				fmt.Printf("Found %d quality variants\n", len(qualities))
+			}
+			selectBest := best || strings.EqualFold(cfg.Quality, "best")
+			streamURL, err = core.SelectQuality(qualities, selectBest)
+			if err != nil {
+				fmt.Printf("Quality selection failed: %v\n", err)
+				return
+			}
+			if debugMode {
+				fmt.Printf("Selected quality URL: %s\n", streamURL)
+			}
+		} else if directURL != "" {
+			streamURL = directURL
+		}
+	}
+	return
+}
+
+// getLinkForEpisode resolves the raw provider link for a given episodeWithNum.
+func getLinkForEpisode(ewn episodeWithNum, prov core.Provider, providerName string) (string, error) {
+	servers, err := prov.GetServers(ewn.ep.ID)
+	if err != nil {
+		return "", fmt.Errorf("error fetching servers: %w", err)
+	}
+	if len(servers) == 0 {
+		return "", fmt.Errorf("no servers found for episode")
+	}
+	selectedServer := servers[0]
+	if !strings.EqualFold(providerName, "hdrezka") {
+		for _, s := range servers {
+			if strings.Contains(strings.ToLower(s.Name), "vidcloud") {
+				selectedServer = s
+				break
+			}
+		}
+	}
+	return prov.GetLink(selectedServer.ID)
+}
+
+// saveHistory writes a history entry if histDB is non-nil.
+func saveHistory(histDB *core.DB, ctx *core.Context, providerName string, season, episode int, epName string, debugMode bool) {
+	if histDB == nil {
+		return
+	}
+	entry := core.HistoryEntry{
+		Title:     ctx.Title,
+		Season:    season,
+		Episode:   episode,
+		EpName:    epName,
+		URL:       ctx.URL,
+		Provider:  providerName,
+		WatchedAt: time.Now(),
+	}
+	if herr := histDB.AddEntry(entry); herr != nil && debugMode {
+		fmt.Printf("Warning: could not save history: %v\n", herr)
+	}
+}
+
 // buildProcessStream returns a closure that decrypts, quality-selects, plays/downloads
 // a stream and saves a history entry on success.
 func buildProcessStream(
@@ -655,92 +903,9 @@ func buildProcessStream(
 	best bool,
 ) func(link, name string, season, episode int, epName string) error {
 	return func(link, name string, season, episode int, epName string) error {
-		var streamURL string
-		var subtitles []string
-		var err error
-
-		referer := link
-		if strings.EqualFold(providerName, "hdrezka") {
-			referer = ctx.URL
-		}
-
-		if strings.EqualFold(providerName, "hdrezka") {
-			streams := strings.Split(link, ",")
-			bestQuality := 0
-			for _, s := range streams {
-				s = strings.TrimSpace(s)
-				if strings.HasPrefix(s, "[") {
-					end := strings.Index(s, "]")
-					if end > 1 {
-						qualityStr := s[1:end]
-						qualityStr = strings.TrimSuffix(qualityStr, "p")
-						q, _ := strconv.Atoi(qualityStr)
-						if q > bestQuality {
-							bestQuality = q
-							streamURL = s[end+1:]
-						}
-					}
-				} else {
-					if streamURL == "" {
-						streamURL = s
-					}
-				}
-			}
-			if streamURL == "" {
-				streamURL = link
-			}
-		} else if strings.EqualFold(providerName, "movies4u") || strings.EqualFold(providerName, "youtube") {
-			streamURL = link
-		} else {
-			if debugMode {
-				fmt.Println("Decrypting stream...")
-			}
-			var decryptedReferer string
-			streamURL, subtitles, decryptedReferer, err = core.DecryptStream(link, ctx.Client)
-			if err != nil {
-				fmt.Printf("Decryption failed for %s: %v\n", name, err)
-				return err
-			}
-			if decryptedReferer != "" {
-				referer = decryptedReferer
-			}
-
-			if strings.EqualFold(providerName, "sflix") || strings.EqualFold(providerName, "braflix") {
-				if parsedURL, err := url.Parse(link); err == nil {
-					referer = fmt.Sprintf("%s://%s/", parsedURL.Scheme, parsedURL.Host)
-				} else {
-					referer = link
-				}
-			}
-		}
-
-		if strings.Contains(streamURL, ".m3u8") {
-			if debugMode {
-				fmt.Println("Fetching available qualities...")
-				fmt.Printf("Master m3u8 URL: %s\n", streamURL)
-				fmt.Printf("Referer: %s\n", referer)
-			}
-			qualities, directURL, err := core.GetQualities(streamURL, ctx.Client, referer)
-			if err != nil {
-				if debugMode {
-					fmt.Printf("Failed to parse m3u8: %v\n", err)
-				}
-			} else if len(qualities) > 0 {
-				if debugMode {
-					fmt.Printf("Found %d quality variants\n", len(qualities))
-				}
-				selectBest := best || strings.EqualFold(cfg.Quality, "best")
-				streamURL, err = core.SelectQuality(qualities, selectBest)
-				if err != nil {
-					fmt.Printf("Quality selection failed: %v\n", err)
-					return err
-				}
-				if debugMode {
-					fmt.Printf("Selected quality URL: %s\n", streamURL)
-				}
-			} else if directURL != "" {
-				streamURL = directURL
-			}
+		streamURL, referer, subtitles, err := resolveStreamURL(link, ctx, cfg, providerName, name, debugMode, best)
+		if err != nil {
+			return err
 		}
 
 		switch currentAction {
@@ -772,23 +937,83 @@ func buildProcessStream(
 			fmt.Println("Unknown action:", currentAction)
 		}
 
-		// Save to history on success.
-		if histDB != nil {
-			entry := core.HistoryEntry{
-				Title:     ctx.Title,
-				Season:    season,
-				Episode:   episode,
-				EpName:    epName,
-				URL:       ctx.URL,
-				Provider:  providerName,
-				WatchedAt: time.Now(),
+		saveHistory(histDB, ctx, providerName, season, episode, epName, debugMode)
+		return nil
+	}
+}
+
+// playSeriesWithControls plays a series starting at startIdx within allEpisodes,
+// showing a Playback control menu (Next / Previous / Replay / Quit) after each
+// episode starts. Navigation wraps within the season.
+func playSeriesWithControls(
+	allEpisodes []episodeWithNum,
+	startIdx int,
+	seasonNum int,
+	prov core.Provider,
+	ctx *core.Context,
+	cfg *core.Config,
+	providerName string,
+	histDB *core.DB,
+	debugMode bool,
+	best bool,
+) error {
+	idx := startIdx
+	for {
+		ewn := allEpisodes[idx]
+		ep := ewn.ep
+		fmt.Printf("\nProcessing: %s\n", ep.Name)
+
+		link, err := getLinkForEpisode(ewn, prov, providerName)
+		if err != nil {
+			fmt.Println("Error getting link:", err)
+			// Try to skip to next on error
+			idx++
+			if idx >= len(allEpisodes) {
+				return nil
 			}
-			if herr := histDB.AddEntry(entry); herr != nil && debugMode {
-				fmt.Printf("Warning: could not save history: %v\n", herr)
-			}
+			continue
 		}
 
-		return nil
+		streamURL, referer, subtitles, err := resolveStreamURL(link, ctx, cfg, providerName, ep.Name, debugMode, best)
+		if err != nil {
+			fmt.Println("Error resolving stream:", err)
+			idx++
+			if idx >= len(allEpisodes) {
+				return nil
+			}
+			continue
+		}
+
+		if debugMode {
+			fmt.Printf("Stream URL: %s\n", streamURL)
+		}
+
+		action, err := core.PlayWithControls(streamURL, ctx.Title+" - "+ep.Name, referer, USER_AGENT, subtitles, debugMode)
+		if err != nil {
+			fmt.Println("Player error:", err)
+		}
+
+		// Save history after playback.
+		saveHistory(histDB, ctx, providerName, seasonNum, ewn.num, ep.Name, debugMode)
+
+		switch action {
+		case core.PlaybackQuit:
+			return nil
+		case core.PlaybackNext:
+			idx++
+			if idx >= len(allEpisodes) {
+				fmt.Println("No more episodes.")
+				return nil
+			}
+		case core.PlaybackPrevious:
+			idx--
+			if idx < 0 {
+				fmt.Println("Already at first episode.")
+				idx = 0
+			}
+		case core.PlaybackReplay:
+			// stay at same idx — handled inside PlayWithControls, should not reach here
+		}
 	}
 }
 

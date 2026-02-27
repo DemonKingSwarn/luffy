@@ -13,13 +13,17 @@ import (
 
 // Recommendation is a title suggested based on watch history.
 type Recommendation struct {
-	Title     string
-	MediaType MediaType // Movie or Series
-	Year      string
-	Overview  string
-	TmdbID    int
-	Score     float64 // internal relevance score, higher is better
+	Title      string
+	MediaType  MediaType // Movie or Series
+	Year       string
+	Overview   string
+	TmdbID     int
+	Score      float64 // internal relevance score, higher is better
+	PosterPath string  // TMDB poster_path (e.g. "/abc123.jpg"); build full URL with TMDB_IMAGE_BASE_URL
 }
+
+// TMDB_IMAGE_BASE_URL is the prefix for constructing poster image URLs.
+const TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
 
 // tasteProfile holds weighted genre and keyword frequency maps built from
 // the user's watch history. Weights are recency-decayed so recently watched
@@ -73,6 +77,7 @@ type tmdbDiscoverResponse struct {
 		VoteAverage  float64 `json:"vote_average"`
 		VoteCount    int     `json:"vote_count"`
 		GenreIDs     []int   `json:"genre_ids"`
+		PosterPath   string  `json:"poster_path"`
 	} `json:"results"`
 }
 
@@ -404,11 +409,12 @@ func tmdbDiscover(client *http.Client, mediaType string, genreIDs []int) ([]Reco
 			year = year[:4]
 		}
 		recs = append(recs, Recommendation{
-			Title:     title,
-			MediaType: mt,
-			Year:      year,
-			Overview:  r.Overview,
-			TmdbID:    r.ID,
+			Title:      title,
+			MediaType:  mt,
+			Year:       year,
+			Overview:   r.Overview,
+			TmdbID:     r.ID,
+			PosterPath: r.PosterPath,
 		})
 	}
 	return recs, nil
@@ -466,6 +472,7 @@ func tmdbSimpleRecommend(client *http.Client, id int, mediaType string) ([]Recom
 			FirstAirDate string  `json:"first_air_date"`
 			Overview     string  `json:"overview"`
 			VoteAverage  float64 `json:"vote_average"`
+			PosterPath   string  `json:"poster_path"`
 		} `json:"results"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
@@ -494,11 +501,12 @@ func tmdbSimpleRecommend(client *http.Client, id int, mediaType string) ([]Recom
 			year = year[:4]
 		}
 		recs = append(recs, Recommendation{
-			Title:     title,
-			MediaType: mt,
-			Year:      year,
-			Overview:  r.Overview,
-			TmdbID:    r.ID,
+			Title:      title,
+			MediaType:  mt,
+			Year:       year,
+			Overview:   r.Overview,
+			TmdbID:     r.ID,
+			PosterPath: r.PosterPath,
 		})
 	}
 	return recs, nil

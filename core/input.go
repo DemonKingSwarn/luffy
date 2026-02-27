@@ -53,6 +53,39 @@ func Select(label string, items []string) int {
 	return res.(int)
 }
 
+// SelectAction shows an fzf menu with the given action labels and returns
+// the label of the chosen action. Returns "" if the selection is cancelled.
+func SelectAction(label string, actions []string) string {
+	components := make([]interface{}, len(actions))
+	for i := range actions {
+		components[i] = i
+	}
+
+	cfg := LoadConfig()
+	prompt := label + "> "
+	height := "40"
+	layout := fzf.LayoutReverse
+	res, _, err := fzf.FzfPrompt(
+		components,
+		func(i interface{}) string {
+			return actions[i.(int)]
+		},
+		cfg.FzfPath,
+		&fzf.Options{
+			PromptString: &prompt,
+			Layout:       &layout,
+			Height:       &height,
+		},
+	)
+
+	if err != nil || res == nil {
+		return ""
+	}
+
+	fmt.Print("\033[H\033[2J") // Clear screen
+	return actions[res.(int)]
+}
+
 func SelectWithPreview(label string, items []string, previewCmd string) int {
 	components := make([]interface{}, len(items))
 	for i := range items {

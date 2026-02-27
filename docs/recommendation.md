@@ -98,12 +98,13 @@ Total: **3N + 82** calls in the worst case. For a typical history of 10–20 tit
 ```go
 // Recommendation is a title suggested based on watch history.
 type Recommendation struct {
-    Title     string
-    MediaType MediaType // Movie or Series
-    Year      string
-    Overview  string
-    TmdbID    int
-    Score     float64   // relevance score, higher is better
+    Title      string
+    MediaType  MediaType // Movie or Series
+    Year       string
+    Overview   string
+    TmdbID     int
+    Score      float64 // relevance score, higher is better
+    PosterPath string  // TMDB poster path, e.g. "/abc123.jpg"
 }
 
 // tasteProfile holds weighted genre and keyword frequency maps.
@@ -124,6 +125,8 @@ func GetRecommendations(client *http.Client) ([]Recommendation, error)
 // Format: "[movie] Title (Year)" or "[series] Title (Year)"
 func FormatRecommendLabel(r Recommendation) string
 ```
+
+`Recommendation.PosterPath` holds the TMDB relative poster path (e.g. `"/abc123.jpg"`). To build a full image URL, prepend `TMDB_IMAGE_BASE_URL` (`"https://image.tmdb.org/t/p/w500"`). The `--show-image` flag in `cmd/root.go` downloads and previews the poster using `core.DownloadPoster` and `core.PreviewPoster` before the fzf selection.
 
 ## Internal Helpers
 
