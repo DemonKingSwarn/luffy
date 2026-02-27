@@ -48,7 +48,7 @@
     - [Android Installation](#6-android-installation)
 - [Dependencies](#dependencies)
 - [Usage](#usage)
-- [Support](#support)
+- [Configuration](#configuration)
 - [Providers](#providers)
 
  > [!NOTE] 
@@ -113,7 +113,7 @@ Install termux [(Guide)](https://termux.com/)
 ```sh
 pkg up -y
 pkg in fzf python-yt-dlp
-curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.0.19/luffy-android-arm64" -o $PREFIX/bin/luffy
+curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.1.0/luffy-android-arm64" -o $PREFIX/bin/luffy
 chmod +x $PREFIX/bin/luffy
 ```
 
@@ -125,19 +125,8 @@ chmod +x $PREFIX/bin/luffy
 - [`iina`](https://iina.io) - Video Player for MacOS
 - [`vlc-android`](https://play.google.com/store/apps/details?id=org.videolan.vlc) - Video Player for Android
 - [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) - Download manager
-- [`fzf`](https://github.com/junegunn/fzf) - For selection menu
-- [`chafa`](https://github.com/hpjansson/chafa) & [`libsixel`](https://github.com/saitoha/libsixel) - For showing posters.
-
-> [!IMPORTANT]
-> To be able to see the images, you need terminal emulators which support the sixel image protocol.
->
-> For ex: kitty, ghostty, wezterm, foot
->
-> Also note that, if you are using `kitty` or `ghostty` then you need to add the following in the config file:
-> ```yaml
-> image_backend: kitty
-> ```
-> config file can be found at  `$HOME/.config/luffy/config.yaml`
+- [`fzf`](https://github.com/junegunn/fzf) - For selection menus
+- [`chafa`](https://github.com/hpjansson/chafa) & [`libsixel`](https://github.com/saitoha/libsixel) - For poster previews (`--show-image`)
 
 ## Usage
 
@@ -145,10 +134,9 @@ chmod +x $PREFIX/bin/luffy
 luffy [query] [flags]
 ```
 
-`[query]` is the title you want to search for (e.g., "breaking bad", "dune", "one piece").
+`[query]` is the title you want to search for (e.g., "breaking bad", "dune", "one piece"). The query is optional when using `--history` or `--recommend`.
 
-### Options
-
+### Flags
 
 | Flag | Alias | Description |
 |------|-------|-------------|
@@ -156,15 +144,27 @@ luffy [query] [flags]
 | `--season` | `-s` | (Series only) Specify the season number. |
 | `--episodes` | `-e` | (Series only) Specify a single episode (`5`) or a range (`1-5`). |
 | `--best` | `-b` | Auto-select the best available quality (skips fzf quality prompt). |
+| `--provider` | `-p` | Select provider (e.g. `sflix`, `braflix`). Overrides config. |
+| `--history` | NA | Browse watch history and resume a previous title. |
+| `--recommend` | NA | Get personalised recommendations based on watch history. |
+| `--show-image` | NA | Show poster previews in fzf (requires chafa and a supported terminal). |
+| `--debug` | NA | Print debug information (URLs, decryption steps, etc.). |
 | `--help` | `-h` | Show help message and exit. |
-| `--show-image` | NA | Show posters preview. |
-| `--providers` | `-p` | Select provider. |
 
+### Playback Controls
 
-### 🎬 Examples
+When watching a TV series, an fzf menu appears alongside the player with four options:
+
+| Action | Description |
+|--------|-------------|
+| **Next** | Kill the player and move to the next episode. |
+| **Previous** | Kill the player and move to the previous episode. |
+| **Replay** | Restart the current episode from the beginning. |
+| **Quit** | Kill the player and exit. |
+
+### Examples
 
 **Search & Play a Movie**
-Search for a title and select interactively:
 ```bash
 luffy "dune"
 ```
@@ -175,55 +175,87 @@ luffy "dune" --action download
 ```
 
 **Play a TV Episode**
-Directly play Season 1, Episode 1:
 ```bash
 luffy "breaking bad" -s 1 -e 1
 ```
 
 **Download a Range of Episodes**
-Download episodes 1 through 5 of Season 2:
 ```bash
 luffy "stranger things" -s 2 -e 1-5 -a download
 ```
 
 **Auto-select Best Quality**
-Skip the quality selection prompt and play in the highest available quality:
 ```bash
 luffy "dune" --best
 ```
 
+**Use a Different Provider**
+```bash
+luffy "breaking bad" --provider sflix
+```
+
+**Resume from Watch History**
+```bash
+luffy --history
+```
+
+**Get Personalised Recommendations**
+```bash
+luffy --recommend
+```
+
+**Recommendations with Poster Previews**
+```bash
+luffy --recommend --show-image
+```
+
+## Configuration
+
+The config file lives at `~/.config/luffy/config.yaml`. All fields are optional; defaults are shown below.
+
+```yaml
+# Path to the fzf binary. Set to an absolute path if fzf is not on PATH.
+fzf_path: fzf
+
+# Video player: "mpv" (default) or "vlc". IINA is used automatically on macOS.
+player: mpv
+
+# chafa rendering backend for poster previews.
+# Options: sixel (default), kitty, iterm, symbols
+image_backend: sixel
+
+# Default search provider.
+provider: flixhq
+
+# Directory where downloaded files are saved. Defaults to home directory.
+dl_path: ""
+
+# Quality selection: leave empty to show an fzf prompt, or set to "best"
+# to always auto-select the highest available quality.
+quality: ""
+```
+
+> [!IMPORTANT]
+> To see poster images, your terminal emulator must support a graphics protocol.
+> Supported terminals include kitty, ghostty, WezTerm, and foot (sixel).
+>
+> If you use kitty or ghostty, set `image_backend: kitty` in your config.
+
 
 # Providers
 
-Luffy uses five main providers, which you can easily change between by specifying them in the config file: `$HOME/.config/luffy/config.yaml`
+You can set the default provider in the config file (`~/.config/luffy/config.yaml`) or override it per-run with `--provider`.
 
-- flixhq:
-    ```yaml
-    provider: flixhq
-    ```
-- sflix:
-    ```yaml
-    provider: sflix
-    ```
+| Provider | `provider:` value | Notes |
+|----------|-------------------|-------|
+| FlixHQ | `flixhq` | Default |
+| Sflix | `sflix` | |
+| Braflix | `braflix` | |
+| Movies4u | `movies4u` | Bollywood only |
+| YouTube | `youtube` | Streams/downloads via yt-dlp |
+| HDRezka | `hdrezka` | Experimental — may not always work |
 
-- braflix:
-    ```yaml
-    provider: braflix
-    ```
-- movies4u (bollywood only):
-    ```yaml
-    provider: movies4u
-    ```
-- youtube:
-    ```yaml
-    provider: youtube
-    ```
-
-There are one experimental providers, using these may not always work. These are:
-
-- hdrezka:
-    ```yaml
-    provider: hdrezka
-    ```
-
-Also note that `flixhq` is the default provider.
+Example config:
+```yaml
+provider: sflix
+```
