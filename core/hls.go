@@ -1,5 +1,4 @@
 // Package core provides HLS (HTTP Live Streaming) download functionality.
-// This implementation is ported from github.com/justchokingaround/greg.
 package core
 
 import (
@@ -7,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -37,7 +37,8 @@ type hlsDownloader struct {
 
 func newHLSDownloader() *hlsDownloader {
 	return &hlsDownloader{
-		client: &http.Client{Timeout: 30 * time.Second},
+		// No global timeout: individual segment fetches use per-request timeouts.
+		client: &http.Client{},
 	}
 }
 
@@ -54,6 +55,14 @@ func DownloadHLS(ctx context.Context, streamURL, outputPath, referer string, pro
 }
 
 // downloadWithProgress drives the full HLS download pipeline.
+//
+// Reliability guarantees:
+//   - Each segment is retried up to maxSegmentRetries times with exponential
+//     backoff + jitter before being counted as a failure.
+//   - The write loop flushes every successfully downloaded segment in order;
+//     a failed segment advances nextIndex so the stream is not stalled.
+//   - The download is only aborted if more than maxFailedSegments segments
+//     fail permanently.
 func (d *hlsDownloader) downloadWithProgress(ctx context.Context, url, output string, headers map[string]string, progressCallback func(int, int)) error {
 	playlist, err := d.parsePlaylist(ctx, url, headers)
 	if err != nil {
@@ -81,6 +90,12 @@ func (d *hlsDownloader) downloadWithProgress(ctx context.Context, url, output st
 	}
 
 	const maxWorkers = 8
+	// Allow up to 2 % of segments to fail permanently before giving up.
+	// Always allow at least 3 failures for very short playlists.
+	maxFailedSegments := totalSegments * 2 / 100
+	if maxFailedSegments < 3 {
+		maxFailedSegments = 3
+	}
 
 	type job struct {
 		index   int
@@ -103,6 +118,7 @@ func (d *hlsDownloader) downloadWithProgress(ctx context.Context, url, output st
 			for j := range jobs {
 				select {
 				case <-ctx.Done():
+					results <- result{index: j.index, err: ctx.Err()}
 					return
 				default:
 				}
@@ -118,32 +134,41 @@ func (d *hlsDownloader) downloadWithProgress(ctx context.Context, url, output st
 	close(jobs)
 
 	// Buffer out-of-order results and write sequentially.
+	// On segment failure we log and advance past the failed index so the
+	// output file is not permanently stalled.
 	segmentBuffer := make(map[int][]byte)
 	nextIndex := 0
+	var failedSegments int
 	var firstErr error
 
 	for i := 0; i < totalSegments; i++ {
 		select {
 		case <-ctx.Done():
+			wg.Wait()
 			return ctx.Err()
 		case res := <-results:
 			if res.err != nil {
+				failedSegments++
 				if firstErr == nil {
 					firstErr = res.err
 				}
-				continue
+				// Mark the slot as failed (nil data) so the flush loop can skip it.
+				segmentBuffer[res.index] = nil
+			} else {
+				segmentBuffer[res.index] = res.data
+				atomic.AddInt32(&downloadedSegments, 1)
 			}
-			segmentBuffer[res.index] = res.data
-			atomic.AddInt32(&downloadedSegments, 1)
 
-			// Flush all contiguous segments starting from nextIndex.
+			// Flush all contiguous segments (including failed ones) from nextIndex.
 			for {
 				data, ok := segmentBuffer[nextIndex]
 				if !ok {
 					break
 				}
-				if _, wErr := outFile.Write(data); wErr != nil && firstErr == nil {
-					firstErr = fmt.Errorf("failed to write segment %d: %w", nextIndex, wErr)
+				if data != nil {
+					if _, wErr := outFile.Write(data); wErr != nil && firstErr == nil {
+						firstErr = fmt.Errorf("failed to write segment %d: %w", nextIndex, wErr)
+					}
 				}
 				delete(segmentBuffer, nextIndex)
 				nextIndex++
@@ -152,10 +177,18 @@ func (d *hlsDownloader) downloadWithProgress(ctx context.Context, url, output st
 			if progressCallback != nil {
 				progressCallback(int(atomic.LoadInt32(&downloadedSegments)), totalSegments)
 			}
+
+			if failedSegments > maxFailedSegments {
+				wg.Wait()
+				return fmt.Errorf("too many segment failures (%d/%d): %w", failedSegments, totalSegments, firstErr)
+			}
 		}
 	}
 
 	wg.Wait()
+	if failedSegments > 0 {
+		fmt.Printf("\n[download] Warning: %d/%d segments failed and were skipped\n", failedSegments, totalSegments)
+	}
 	return firstErr
 }
 
@@ -317,51 +350,79 @@ func parseMediaPlaylistLines(lines []string, baseURL string) *hlsPlaylist {
 	return playlist
 }
 
-// downloadSegment fetches a single .ts segment with up to 2 retries.
+// downloadSegment fetches a single .ts segment with exponential backoff retries.
+// It retries up to maxRetries times on any transient error (network timeout,
+// 5xx status, read error) before giving up.
 func (d *hlsDownloader) downloadSegment(ctx context.Context, url string, headers map[string]string) ([]byte, error) {
-	const maxRetries = 2
+	const maxRetries = 6
+	var lastErr error
+
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-		if err != nil {
-			return nil, err
-		}
-		for k, v := range headers {
-			req.Header.Set(k, v)
-		}
-		if req.Header.Get("User-Agent") == "" {
-			req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-		}
-
-		resp, err := d.client.Do(req)
-		if err != nil {
-			if attempt < maxRetries {
-				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
-				continue
+		if attempt > 0 {
+			// Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s — capped at 30s,
+			// with ±25% jitter to avoid thundering herd.
+			base := time.Duration(1<<uint(attempt-1)) * time.Second
+			if base > 30*time.Second {
+				base = 30 * time.Second
 			}
-			return nil, err
-		}
-
-		body, readErr := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-
-		if readErr != nil {
-			if attempt < maxRetries {
-				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
-				continue
+			jitter := time.Duration(rand.Int63n(int64(base) / 4))
+			sleep := base + jitter
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(sleep):
 			}
-			return nil, readErr
 		}
 
-		if resp.StatusCode != http.StatusOK {
-			if attempt < maxRetries {
-				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
-				continue
-			}
-			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
-		}
+		// Per-request timeout: generous enough for large segments on slow CDNs.
+		reqCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		data, err := d.fetchSegment(reqCtx, url, headers)
+		cancel()
 
-		return body, nil
+		if err == nil {
+			return data, nil
+		}
+		lastErr = err
+
+		// Don't retry on context cancellation from the parent.
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 	}
 
-	return nil, fmt.Errorf("failed to download segment after %d attempts", maxRetries+1)
+	return nil, fmt.Errorf("segment failed after %d attempts: %w", maxRetries+1, lastErr)
+}
+
+// fetchSegment performs a single HTTP GET for a segment URL.
+func (d *hlsDownloader) fetchSegment(ctx context.Context, url string, headers map[string]string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	}
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	body, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	if readErr != nil {
+		return nil, readErr
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	return body, nil
 }

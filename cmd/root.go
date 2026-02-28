@@ -921,9 +921,6 @@ func buildProcessStream(
 		case "download":
 			dlPath := cfg.DlPath
 			homeDir, _ := os.UserHomeDir()
-			if dlPath == "" {
-				dlPath = homeDir
-			}
 			if strings.EqualFold(providerName, "youtube") {
 				err = core.DownloadYTDLP(homeDir, dlPath, name, streamURL, referer, USER_AGENT, debugMode)
 			} else {
