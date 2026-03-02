@@ -3,7 +3,7 @@ binary_name := "luffy"
 flags       := "-s -w"
 build_dir   := "builds"
 
-build: windows-amd64 windows-386 windows-arm linux-amd64 linux-386 linux-arm android mac-arm mac-intel freebsd-amd64
+build: windows-amd64 windows-386 windows-arm linux-amd64 linux-386 linux-arm android mac-arm mac-intel
 
 _build os arch ext="":
     @echo "Building {{os}}/{{arch}}..."
@@ -31,16 +31,11 @@ linux-386:     (_build "linux" "386")
 linux-arm:     (_build "linux" "arm64")
     @just _compress {{build_dir}}/{{binary_name}}-linux-arm64
 
-android:     (_build "android" "arm64")
-    @just _compress {{build_dir}}/{{binary_name}}-android-arm64
-
-linux-risc:    (_build "linux" "riscv64")
-    @just _compress {{build_dir}}/{{binary_name}}-linux-riscv64
-
 mac-arm:       (_build "darwin" "arm64")
 mac-intel:     (_build "darwin" "amd64")
 freebsd-amd64: (_build "freebsd" "amd64")
 freebsd-386:   (_build "freebsd" "386")
+android:   (_build "android" "arm64")
 
 clean:
     rm -rf {{build_dir}}
