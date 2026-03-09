@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/demonkingswarn/fzf.go"
+	"golang.org/x/term"
 )
 
 func Prompt(label string) string {
@@ -26,6 +27,10 @@ func Select(label string, items []string) int {
 	prompt := label + "> "
 	height := "40"
 	layout := fzf.LayoutReverse
+
+	fd := int(os.Stdin.Fd())
+	savedState, _ := term.GetState(fd)
+
 	res, _, err := fzf.FzfPrompt(
 		components,
 		func(i interface{}) string {
@@ -38,6 +43,12 @@ func Select(label string, items []string) int {
 			Height:       &height,
 		},
 	)
+
+	if savedState != nil {
+		term.Restore(fd, savedState) //nolint:errcheck
+	}
+	fmt.Print("\033[?1049l")
+	fmt.Print("\033[0m")
 
 	if err != nil {
 		fmt.Println("Selection cancelled or failed:", err)
@@ -89,6 +100,14 @@ func SelectActionCtx(label string, actions []string, done <-chan struct{}) strin
 	}
 	f.AddLines(lines, true)
 
+	// Save terminal state before starting fzf so we can restore it if fzf is
+	// killed mid-session (e.g. when mpv exits and the done channel fires).
+	// fzf puts the terminal into raw/alternate-screen mode; killing it abruptly
+	// leaves the terminal in that state.  Restoring the saved state fixes the
+	// layout without requiring a full terminal restart.
+	fd := int(os.Stdin.Fd())
+	savedState, _ := term.GetState(fd)
+
 	// If done fires, kill fzf so GetOutput unblocks.
 	if done != nil {
 		go func() {
@@ -102,6 +121,15 @@ func SelectActionCtx(label string, actions []string, done <-chan struct{}) strin
 	}
 
 	query, _, err := f.GetOutput()
+
+	// Restore terminal state regardless of whether fzf exited normally or was killed.
+	if savedState != nil {
+		term.Restore(fd, savedState) //nolint:errcheck
+	}
+	// Exit alternate screen and reset any leftover escape sequences.
+	fmt.Print("\033[?1049l") // exit alternate screen buffer
+	fmt.Print("\033[0m")     // reset attributes
+
 	if err != nil || query == "" {
 		return ""
 	}
@@ -129,6 +157,9 @@ func SelectWithPreview(label string, items []string, previewCmd string) int {
 		opts.Preview = &previewCmd
 	}
 
+	fd := int(os.Stdin.Fd())
+	savedState, _ := term.GetState(fd)
+
 	res, _, err := fzf.FzfPrompt(
 		components,
 		func(i interface{}) string {
@@ -137,6 +168,12 @@ func SelectWithPreview(label string, items []string, previewCmd string) int {
 		cfg.FzfPath,
 		opts,
 	)
+
+	if savedState != nil {
+		term.Restore(fd, savedState) //nolint:errcheck
+	}
+	fmt.Print("\033[?1049l")
+	fmt.Print("\033[0m")
 
 	if err != nil {
 		fmt.Println("Selection cancelled or failed:", err)

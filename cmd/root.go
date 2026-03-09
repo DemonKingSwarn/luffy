@@ -246,7 +246,11 @@ var rootCmd = &cobra.Command{
 						return err
 					}
 					lastPos := getLastPosition(histDB, ctx.Title, 0, 0)
-					result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag, lastPos)
+					result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag, lastPos, core.HookContext{
+						Title:    ctx.Title,
+						URL:      link,
+						Provider: histProviderName,
+					})
 					if err != nil {
 						return err
 					}
@@ -452,7 +456,11 @@ var rootCmd = &cobra.Command{
 						return err
 					}
 					lastPos := getLastPosition(histDB, ctx.Title, 0, 0)
-					result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag, lastPos)
+					result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag, lastPos, core.HookContext{
+						Title:    ctx.Title,
+						URL:      link,
+						Provider: providerName,
+					})
 					if err != nil {
 						return err
 					}
@@ -687,7 +695,11 @@ var rootCmd = &cobra.Command{
 					return err
 				}
 				lastPos := getLastPosition(histDB, ctx.Title, 0, 0)
-				result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag, lastPos)
+				result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag, lastPos, core.HookContext{
+					Title:    ctx.Title,
+					URL:      link,
+					Provider: providerName,
+				})
 				if err != nil {
 					return err
 				}
@@ -877,7 +889,7 @@ func getLastPosition(histDB *core.DB, title string, season, episode int) float64
 }
 
 // saveHistory writes a history entry if histDB is non-nil.
-// positionSecs is the playback position in seconds as reported by mpv's watch-later file.
+// positionSecs is the playback position in seconds as tracked via mpv IPC.
 func saveHistory(histDB *core.DB, ctx *core.Context, providerName string, season, episode int, epName string, positionSecs float64, debugMode bool) {
 	if histDB == nil {
 		return
@@ -920,7 +932,14 @@ func buildProcessStream(
 				fmt.Printf("Stream URL: %s\n", streamURL)
 			}
 			lastPos := getLastPosition(histDB, ctx.Title, season, episode)
-			posSecs, playErr := core.Play(streamURL, name, referer, USER_AGENT, subtitles, debugMode, lastPos)
+			posSecs, playErr := core.Play(streamURL, name, referer, USER_AGENT, subtitles, debugMode, lastPos, core.HookContext{
+				Title:    ctx.Title,
+				URL:      link,
+				Season:   season,
+				Episode:  episode,
+				EpName:   epName,
+				Provider: providerName,
+			})
 			if playErr != nil {
 				fmt.Println("Error playing:", playErr)
 				return playErr
@@ -930,6 +949,17 @@ func buildProcessStream(
 		case "download":
 			dlPath := cfg.DlPath
 			homeDir, _ := os.UserHomeDir()
+			hctx := core.HookContext{
+				Title:     ctx.Title,
+				URL:       link,
+				Season:    season,
+				Episode:   episode,
+				EpName:    epName,
+				Provider:  providerName,
+				Action:    "download",
+				StreamURL: streamURL,
+			}
+			core.RunHook(cfg.Hooks.OnDownload, hctx, debugMode)
 			if strings.EqualFold(providerName, "youtube") {
 				err = core.DownloadYTDLP(homeDir, dlPath, name, streamURL, referer, USER_AGENT, debugMode)
 			} else {
@@ -995,7 +1025,14 @@ func playSeriesWithControls(
 		}
 
 		lastPos := getLastPosition(histDB, ctx.Title, seasonNum, ewn.num)
-		result, err := core.PlayWithControls(streamURL, ctx.Title+" - "+ep.Name, referer, USER_AGENT, subtitles, debugMode, lastPos)
+		result, err := core.PlayWithControls(streamURL, ctx.Title+" - "+ep.Name, referer, USER_AGENT, subtitles, debugMode, lastPos, core.HookContext{
+			Title:    ctx.Title,
+			URL:      link,
+			Season:   seasonNum,
+			Episode:  ewn.num,
+			EpName:   ep.Name,
+			Provider: providerName,
+		})
 		if err != nil {
 			fmt.Println("Player error:", err)
 		}

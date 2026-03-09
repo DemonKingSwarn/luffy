@@ -48,6 +48,7 @@
 - [Dependencies](#dependencies)
 - [Usage](#usage)
 - [Configuration](#configuration)
+- [Hooks & MpvArgs](#hooks--mpvargs)
 - [Providers](#providers)
 
  > [!NOTE] 
@@ -232,6 +233,20 @@ dl_path: ""
 # Quality selection: leave empty to show an fzf prompt, or set to "best"
 # to always auto-select the highest available quality.
 quality: ""
+
+# Extra arguments appended to every mpv invocation (ignored on VLC/IINA/Android).
+# mpv_args:
+#   - "--hwdec=auto"
+#   - "--volume=80"
+
+# Lifecycle hooks — shell commands run at key playback events.
+# LUFFY_TITLE, LUFFY_URL, LUFFY_SEASON, LUFFY_EPISODE, LUFFY_EP_NAME,
+# LUFFY_PROVIDER, LUFFY_ACTION, LUFFY_STREAM_URL, and LUFFY_POSITION
+# are set in the environment for every hook.
+# hooks:
+#   on_play: 'notify-send "Now playing" "$LUFFY_TITLE"'
+#   on_exit: 'echo "$LUFFY_TITLE stopped at ${LUFFY_POSITION}s" >> ~/luffy.log'
+#   on_download: 'notify-send "Downloading" "$LUFFY_TITLE"'
 ```
 
 > [!IMPORTANT]
@@ -240,6 +255,30 @@ quality: ""
 >
 > If you use kitty or ghostty, set `image_backend: kitty` in your config.
 
+## Hooks & MpvArgs
+
+Shell commands can be run at three lifecycle points, and extra mpv flags can be injected via config. See `docs/hooks.md` for the full reference.
+
+### MpvArgs
+
+Extra arguments appended verbatim to every mpv invocation (ignored on VLC / IINA / Android):
+
+```yaml
+mpv_args:
+  - "--hwdec=auto"
+  - "--volume=80"
+```
+
+### Hooks
+
+```yaml
+hooks:
+  on_play: 'notify-send "Now playing" "$LUFFY_TITLE"'
+  on_exit: 'echo "$LUFFY_TITLE stopped at ${LUFFY_POSITION}s" >> ~/luffy.log'
+  on_download: 'notify-send "Downloading" "$LUFFY_TITLE"'
+```
+
+Every hook receives `LUFFY_TITLE`, `LUFFY_URL`, `LUFFY_SEASON`, `LUFFY_EPISODE`, `LUFFY_EP_NAME`, `LUFFY_PROVIDER`, `LUFFY_ACTION`, `LUFFY_STREAM_URL`, and `LUFFY_POSITION` as environment variables.
 
 # Providers
 

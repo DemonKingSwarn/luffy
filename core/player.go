@@ -1,14 +1,16 @@
 package core
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
+
+	"github.com/diniamo/gopv"
 )
 
 var mpv_executable string = "mpv"
@@ -23,57 +25,50 @@ func checkAndroid() bool {
 	return strings.TrimSpace(string(output)) == "Android"
 }
 
-// watchLaterDir returns a temporary directory used exclusively for this
-// luffy process's mpv watch-later files. It is created on first call.
-func watchLaterDir() string {
-	dir := filepath.Join(os.TempDir(), fmt.Sprintf("luffy-watchlater-%d", os.Getpid()))
-	os.MkdirAll(dir, 0o700) //nolint:errcheck
-	return dir
+// isMPV returns true when the current platform/config uses mpv for playback.
+func isMPV() bool {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" || checkAndroid() {
+		return false
+	}
+	cfg := LoadConfig()
+	return cfg.Player != "vlc"
 }
 
-// readWatchLaterSecs scans all files in dir for a "start=<seconds>" line and
-// returns the first value found. Returns 0 if nothing is found.
-func readWatchLaterSecs(dir string) float64 {
-	entries, err := os.ReadDir(dir)
+// mpvIPCSocket holds the state for an active MPV IPC session.
+type mpvIPCSession struct {
+	socketPath  string
+	client      *gopv.Client
+	mu          sync.Mutex
+	lastPosSecs float64
+}
+
+// generateSocketPath returns a unique path for the mpv IPC socket.
+// On Windows, mpv uses named pipes; IPC is skipped there.
+func generateSocketPath() (string, error) {
+	path, err := gopv.GeneratePath()
 	if err != nil {
-		return 0
+		return "", fmt.Errorf("failed to generate IPC socket path: %w", err)
 	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		f, err := os.Open(filepath.Join(dir, e.Name()))
-		if err != nil {
-			continue
-		}
-		scanner := bufio.NewScanner(f)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if strings.HasPrefix(line, "start=") {
-				val := strings.TrimPrefix(line, "start=")
-				if secs, err := strconv.ParseFloat(val, 64); err == nil {
-					f.Close()
-					return secs
-				}
-			}
-		}
-		f.Close()
-	}
-	return 0
+	return path, nil
 }
 
 // buildPlayerCmd constructs the player command for the current platform/config.
-// wlDir, if non-empty, is the watch-later directory passed to mpv so it writes
-// position on quit.
+// socketPath, if non-empty (and on a supported platform), adds --input-ipc-server
+// so we can connect via gopv IPC to track position.
 // startSecs, if > 0, tells mpv to seek to that position before playing.
+// cfg, if non-nil, is used to append MpvArgs; if nil LoadConfig() is called.
 // It does NOT start the process.
-func buildPlayerCmd(url, title, referer, userAgent string, subtitles []string, debug bool, wlDir string, startSecs float64) (*exec.Cmd, error) {
+func buildPlayerCmd(url, title, referer, userAgent string, subtitles []string, debug bool, socketPath string, startSecs float64, cfg *Config) (*exec.Cmd, error) {
 	if runtime.GOOS == "windows" {
 		mpv_executable = "mpv.exe"
 		vlc_executable = "vlc.exe"
 	} else {
 		mpv_executable = "mpv"
 		vlc_executable = "vlc"
+	}
+
+	if cfg == nil {
+		cfg = LoadConfig()
 	}
 
 	var cmd *exec.Cmd
@@ -113,7 +108,6 @@ func buildPlayerCmd(url, title, referer, userAgent string, subtitles []string, d
 		cmd = exec.Command("iina", args...)
 
 	default:
-		cfg := LoadConfig()
 		if cfg.Player == "vlc" {
 			args := []string{
 				url,
@@ -144,18 +138,16 @@ func buildPlayerCmd(url, title, referer, userAgent string, subtitles []string, d
 					args = append(args, fmt.Sprintf("--sub-file=%s", sub))
 				}
 			}
-			// Watch-later: mpv writes position to a file on quit.
-			if wlDir != "" {
-				args = append(args,
-					fmt.Sprintf("--watch-later-directory=%s", wlDir),
-					"--write-filename-in-watch-later-config",
-					"--save-position-on-quit",
-				)
+			// IPC socket for position tracking via gopv.
+			if socketPath != "" {
+				args = append(args, fmt.Sprintf("--input-ipc-server=%s", socketPath))
 			}
 			// Resume from saved position (seconds).
 			if startSecs > 0 {
-				args = append(args, fmt.Sprintf("--start=%f", startSecs))
+				args = append(args, fmt.Sprintf("--start=%s", strconv.FormatFloat(startSecs, 'f', 3, 64)))
 			}
+			// Append extra user-configured mpv args.
+			args = append(args, cfg.MpvArgs...)
 			cmd = exec.Command(mpv_executable, args...)
 		}
 	}
@@ -163,25 +155,66 @@ func buildPlayerCmd(url, title, referer, userAgent string, subtitles []string, d
 	return cmd, nil
 }
 
-// isMPV returns true when the current platform/config uses mpv for playback.
-func isMPV() bool {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" || checkAndroid() {
-		return false
+// connectMPVIPC tries to connect to the mpv IPC socket, retrying for up to
+// 3 seconds to allow mpv time to start and create the socket.
+// Returns nil if the connection could not be established.
+func connectMPVIPC(socketPath string) *gopv.Client {
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		client, err := gopv.Connect(socketPath, nil)
+		if err == nil {
+			return client
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	cfg := LoadConfig()
-	return cfg.Player != "vlc"
+	return nil
+}
+
+// readPositionViaIPC queries the current time-pos property from mpv over IPC.
+// Returns 0 on any error.
+func readPositionViaIPC(client *gopv.Client) float64 {
+	if client == nil {
+		return 0
+	}
+	data, err := client.Request("get_property", "time-pos")
+	if err != nil {
+		return 0
+	}
+	switch v := data.(type) {
+	case float64:
+		return v
+	case string:
+		f, err := strconv.ParseFloat(v, 64)
+		if err == nil {
+			return f
+		}
+	}
+	return 0
 }
 
 // Play starts the player and blocks until it exits.
+// hctx provides metadata for lifecycle hooks (on_play / on_exit).
 // Returns the final playback position in seconds; 0 if not tracked.
-func Play(url, title, referer, userAgent string, subtitles []string, debug bool, startSecs float64) (float64, error) {
-	wlDir := ""
+func Play(url, title, referer, userAgent string, subtitles []string, debug bool, startSecs float64, hctx HookContext) (float64, error) {
+	cfg := LoadConfig()
+
+	hctx.StreamURL = url
+	hctx.Action = "play"
+	RunHook(cfg.Hooks.OnPlay, hctx, debug)
+
+	socketPath := ""
 	if isMPV() {
-		wlDir = watchLaterDir()
-		defer os.RemoveAll(wlDir)
+		var err error
+		socketPath, err = generateSocketPath()
+		if err != nil && debug {
+			fmt.Printf("Warning: could not generate IPC socket path: %v\n", err)
+		}
+		if socketPath != "" {
+			defer os.Remove(socketPath)
+		}
 	}
 
-	cmd, err := buildPlayerCmd(url, title, referer, userAgent, subtitles, debug, wlDir, startSecs)
+	cmd, err := buildPlayerCmd(url, title, referer, userAgent, subtitles, debug, socketPath, startSecs, cfg)
 	if err != nil {
 		return 0, err
 	}
@@ -202,21 +235,61 @@ func Play(url, title, referer, userAgent string, subtitles []string, debug bool,
 		return 0, fmt.Errorf("failed to start player: %w", err)
 	}
 
-	cmd.Wait() //nolint:errcheck
-
-	if wlDir == "" {
-		return 0, nil
+	// Connect to IPC and track position in background.
+	var lastPos float64
+	if socketPath != "" {
+		client := connectMPVIPC(socketPath)
+		if client != nil {
+			defer client.Close()
+			var mu sync.Mutex
+			stop := make(chan struct{})
+			go func() {
+				ticker := time.NewTicker(time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-stop:
+						return
+					case <-ticker.C:
+						pos := readPositionViaIPC(client)
+						if pos > 0 {
+							mu.Lock()
+							lastPos = pos
+							mu.Unlock()
+						}
+					}
+				}
+			}()
+			cmd.Wait() //nolint:errcheck
+			close(stop)
+			// One final read after mpv exits.
+			if pos := readPositionViaIPC(client); pos > 0 {
+				mu.Lock()
+				lastPos = pos
+				mu.Unlock()
+			}
+			mu.Lock()
+			pos := lastPos
+			mu.Unlock()
+			hctx.Position = pos
+			RunHook(cfg.Hooks.OnExit, hctx, debug)
+			return pos, nil
+		}
 	}
-	return readWatchLaterSecs(wlDir), nil
+
+	cmd.Wait() //nolint:errcheck
+	RunHook(cfg.Hooks.OnExit, hctx, debug)
+	return 0, nil
 }
 
 // StartPlayer launches the player in the background with its output suppressed
 // so the terminal stays available for the fzf control menu.
-// wlDir is passed to mpv's --watch-later-directory if non-empty.
+// socketPath, if non-empty, is the IPC socket path passed to mpv.
 // startSecs, if > 0, tells mpv to seek to that position before playing.
+// cfg is used to append MpvArgs; if nil, LoadConfig() is called internally.
 // Returns the running *exec.Cmd so the caller can wait on or kill it.
-func StartPlayer(url, title, referer, userAgent string, subtitles []string, debug bool, wlDir string, startSecs float64) (*exec.Cmd, error) {
-	cmd, err := buildPlayerCmd(url, title, referer, userAgent, subtitles, debug, wlDir, startSecs)
+func StartPlayer(url, title, referer, userAgent string, subtitles []string, debug bool, socketPath string, startSecs float64, cfg *Config) (*exec.Cmd, error) {
+	cmd, err := buildPlayerCmd(url, title, referer, userAgent, subtitles, debug, socketPath, startSecs, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -257,22 +330,64 @@ type PlayResult struct {
 // PlayWithControls starts the player in the background and shows an fzf menu
 // with Replay / Next / Previous / Quit.  It kills the running player process
 // before returning so the caller can act on the chosen action immediately.
+// Position is tracked in real-time via MPV IPC (gopv), not via watch-later files.
+// hctx provides metadata for lifecycle hooks (on_play / on_exit).
 // Returns a PlayResult containing the chosen action and the last tracked position.
-func PlayWithControls(url, title, referer, userAgent string, subtitles []string, debug bool, startSecs float64) (PlayResult, error) {
+func PlayWithControls(url, title, referer, userAgent string, subtitles []string, debug bool, startSecs float64, hctx HookContext) (PlayResult, error) {
+	cfg := LoadConfig()
+
 	for {
 		fmt.Printf("Starting player for %s...\n", title)
 
-		wlDir := ""
+		hctx.StreamURL = url
+		hctx.Action = "play"
+		RunHook(cfg.Hooks.OnPlay, hctx, debug)
+
+		socketPath := ""
 		if isMPV() {
-			wlDir = watchLaterDir()
+			var err error
+			socketPath, err = generateSocketPath()
+			if err != nil && debug {
+				fmt.Printf("Warning: could not generate IPC socket path: %v\n", err)
+			}
 		}
 
-		cmd, err := StartPlayer(url, title, referer, userAgent, subtitles, debug, wlDir, startSecs)
+		cmd, err := StartPlayer(url, title, referer, userAgent, subtitles, debug, socketPath, startSecs, cfg)
 		if err != nil {
-			if wlDir != "" {
-				os.RemoveAll(wlDir)
+			if socketPath != "" {
+				os.Remove(socketPath)
 			}
 			return PlayResult{Action: PlaybackQuit}, err
+		}
+
+		// Connect to IPC and keep a live position counter.
+		var ipcClient *gopv.Client
+		var posMu sync.Mutex
+		var lastPos float64
+		var ipcStop chan struct{}
+
+		if socketPath != "" {
+			ipcClient = connectMPVIPC(socketPath)
+			if ipcClient != nil {
+				ipcStop = make(chan struct{})
+				go func() {
+					ticker := time.NewTicker(time.Second)
+					defer ticker.Stop()
+					for {
+						select {
+						case <-ipcStop:
+							return
+						case <-ticker.C:
+							pos := readPositionViaIPC(ipcClient)
+							if pos > 0 {
+								posMu.Lock()
+								lastPos = pos
+								posMu.Unlock()
+							}
+						}
+					}
+				}()
+			}
 		}
 
 		// Signal when the player exits on its own.
@@ -300,12 +415,26 @@ func PlayWithControls(url, title, referer, userAgent string, subtitles []string,
 			<-done
 		}
 
-		// Read position from watch-later file — mpv writes it on any quit (q, kill, etc.)
+		// Stop the IPC polling goroutine and do a final position read.
 		var finalSecs float64
-		if wlDir != "" {
-			finalSecs = readWatchLaterSecs(wlDir)
-			os.RemoveAll(wlDir)
+		if ipcClient != nil {
+			close(ipcStop)
+			if pos := readPositionViaIPC(ipcClient); pos > 0 {
+				posMu.Lock()
+				lastPos = pos
+				posMu.Unlock()
+			}
+			ipcClient.Close()
 		}
+		if socketPath != "" {
+			posMu.Lock()
+			finalSecs = lastPos
+			posMu.Unlock()
+			os.Remove(socketPath)
+		}
+
+		hctx.Position = finalSecs
+		RunHook(cfg.Hooks.OnExit, hctx, debug)
 
 		if chosen == "" || chosen == string(PlaybackQuit) {
 			return PlayResult{Action: PlaybackQuit, PositionSecs: finalSecs}, nil

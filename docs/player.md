@@ -1,6 +1,6 @@
 # Player
 
-`core/player.go` abstracts video player invocation across all supported platforms. It offers three modes: a simple blocking call, a background launch with suppressed output, and a full playback control loop with an fzf menu.
+`core/player.go` abstracts video player invocation across all supported platforms. It offers three modes: a simple blocking call, a background launch with suppressed output, and a full playback control loop with an fzf menu. Lifecycle hooks (`on_play`, `on_exit`) are fired automatically by `Play` and `PlayWithControls`.
 
 ## How It Works
 
@@ -23,29 +23,48 @@ Common arguments passed to all desktop players:
 | `--force-media-title` / `--meta-title` / `--mpv-force-media-title` | Title shown in the player window |
 | `--sub-file` / `--input-slave` / `--mpv-sub-files` | Subtitle file URLs |
 
-### 2. Blocking Play (Play)
+`cfg.MpvArgs` is appended verbatim after all built-in mpv flags. It is ignored on VLC, IINA, and Android.
 
-`Play` connects the player's stdout and stderr to the terminal and calls `cmd.Run()`, blocking until the player exits. This is used for the movie flow and single-episode play where no next/previous navigation is needed.
+### 2. Lifecycle Hooks
 
-### 3. Background Launch (StartPlayer)
+`Play` and `PlayWithControls` fire lifecycle hooks at two points:
+
+- **`on_play`** — called with `Action = "play"` and `StreamURL` set, immediately before the player process is launched.
+- **`on_exit`** — called after the player process exits, with `Position` set to the final playback position in seconds (0 if IPC tracking was unavailable).
+
+Both functions accept a `HookContext` from the caller. The caller must populate `Title`, `URL`, `Provider`, `Season`, `Episode`, and `EpName` — these cannot be inferred inside `player.go`. `Action` and `StreamURL` are filled in automatically.
+
+The `on_download` hook is not fired here; it is fired in `cmd/root.go`'s `buildProcessStream` before `Download` / `DownloadYTDLP`.
+
+### 3. Blocking Play (`Play`)
+
+`Play` loads config, fires `on_play`, connects the player's stdout and stderr to the terminal, and calls `cmd.Wait()`, blocking until the player exits. When IPC tracking is active, the final position is captured with one last IPC read after the process exits. `on_exit` is called with the final position before returning.
+
+### 4. Background Launch (`StartPlayer`)
 
 `StartPlayer` calls `cmd.Start()` instead of `cmd.Run()` and sets `cmd.Stdout = nil` and `cmd.Stderr = nil` so the player's output is discarded. This keeps the terminal free for the fzf control menu. Returns the running `*exec.Cmd` so the caller can wait on it or kill it.
 
-### 4. Playback Control Loop (PlayWithControls)
+### 5. Playback Control Loop (`PlayWithControls`)
 
-`PlayWithControls` is the main entrypoint for series playback. It runs a loop:
+`PlayWithControls` is the main entrypoint for series playback. It loads config once, then runs a loop:
 
-1. Call `StartPlayer` to launch the player in the background.
-2. Spawn a goroutine that waits for the player process to exit naturally and closes a `done` channel.
-3. Call `SelectAction("Playback:", ...)` to show an fzf menu with four options:
+1. Fire `on_play` hook.
+2. Call `StartPlayer` to launch the player in the background.
+3. Spawn a goroutine that waits for the player process to exit naturally and closes a `done` channel.
+4. Call `SelectActionCtx("Playback:", ...)` to show an fzf menu with four options:
    - **Next** — move to the next episode.
    - **Previous** — move to the previous episode.
    - **Replay** — restart the same episode (loop back).
    - **Quit** — exit.
-4. When the user picks an action, kill the player if it is still running (select on the `done` channel to avoid a double-close panic), then return the chosen `PlaybackAction`.
-5. If `Replay` is chosen, skip the return and restart the loop with the same URL.
+5. When the user picks an action (or the player exits naturally), kill the player if still running.
+6. Capture final IPC position, fire `on_exit` hook with `Position` set.
+7. If `Replay` is chosen, restart the loop from step 1 (hooks fire again).
 
 The fzf menu appears immediately after the player launches, so the user can navigate episodes while content plays — or after it finishes naturally.
+
+### 6. IPC Position Tracking
+
+When mpv is used on a supported platform, `buildPlayerCmd` adds `--input-ipc-server=<socketPath>`. A background goroutine polls `time-pos` via gopv every second, updating `lastPos`. On player exit, one final IPC read is attempted to capture the last position. The socket file is cleaned up with `os.Remove` in all paths.
 
 ## Key Types
 
@@ -60,28 +79,42 @@ const (
     PlaybackPrevious PlaybackAction = "Previous"
     PlaybackQuit     PlaybackAction = "Quit"
 )
+
+// PlayResult bundles the chosen action and the final playback position.
+type PlayResult struct {
+    Action       PlaybackAction
+    PositionSecs float64 // seconds; 0 if not tracked
+}
 ```
 
 ## Public API
 
 ```go
 // Play launches the player and blocks until it exits.
-// stdout/stderr are connected to the terminal.
-func Play(url, title, referer, userAgent string, subtitles []string, debug bool) error
+// Fires on_play before launch and on_exit after exit.
+// hctx must have Title, URL, Provider, Season, Episode, EpName populated.
+// Returns final playback position in seconds (0 if IPC unavailable).
+func Play(url, title, referer, userAgent string, subtitles []string, debug bool, startSecs float64, hctx HookContext) (float64, error)
 
 // StartPlayer launches the player in the background with output suppressed.
+// cfg is used for MpvArgs; pass nil to call LoadConfig() internally.
 // Returns the running *exec.Cmd. The caller is responsible for cmd.Wait().
-func StartPlayer(url, title, referer, userAgent string, subtitles []string, debug bool) (*exec.Cmd, error)
+func StartPlayer(url, title, referer, userAgent string, subtitles []string, debug bool, socketPath string, startSecs float64, cfg *Config) (*exec.Cmd, error)
 
 // PlayWithControls starts the player in the background and shows an fzf
-// menu (Next / Previous / Replay / Quit). Kills the player before returning.
+// menu (Next / Previous / Replay / Quit). Fires on_play and on_exit each
+// iteration. hctx must have Title, URL, Provider, Season, Episode, EpName populated.
 // Replay loops internally; all other actions return to the caller.
-func PlayWithControls(url, title, referer, userAgent string, subtitles []string, debug bool) (PlaybackAction, error)
+func PlayWithControls(url, title, referer, userAgent string, subtitles []string, debug bool, startSecs float64, hctx HookContext) (PlayResult, error)
 ```
 
 ## Internal Helpers
 
 | Function | Purpose |
 |----------|---------|
-| `buildPlayerCmd` | Constructs the platform-appropriate `*exec.Cmd` without starting it |
+| `buildPlayerCmd` | Constructs the platform-appropriate `*exec.Cmd`; appends `cfg.MpvArgs` for mpv |
 | `checkAndroid` | Runs `uname -o` to detect the Android environment |
+| `isMPV` | Returns true when the platform/config uses mpv (Linux/Windows/FreeBSD, player != vlc) |
+| `generateSocketPath` | Returns a unique path for the mpv IPC socket via gopv |
+| `connectMPVIPC` | Retries connecting to the mpv IPC socket for up to 3 seconds |
+| `readPositionViaIPC` | Queries `time-pos` from a live gopv client; returns 0 on error |

@@ -19,3 +19,38 @@ provider: flixhq
 # Download path for saved videos (default: user's home directory)
 # Leave empty to use home directory
 dl_path: "/home/swarn/dl"
+
+# Quality selection (default: empty = show fzf prompt to pick quality)
+# Set to "best" to automatically select the highest available quality.
+# quality: best
+
+# Extra arguments appended to every mpv invocation.
+# Useful for hardware decoding, volume presets, window settings, etc.
+# mpv_args:
+#   - "--hwdec=auto"
+#   - "--volume=80"
+#   - "--save-position-on-quit"
+
+# Lifecycle hooks — shell commands run at key playback events.
+# Each hook is executed via "sh -c" (Unix) or "cmd /c" (Windows).
+# The following environment variables are set for every hook:
+#
+#   LUFFY_TITLE      – media title
+#   LUFFY_URL        – provider media URL
+#   LUFFY_SEASON     – season number (0 for movies)
+#   LUFFY_EPISODE    – episode number (0 for movies)
+#   LUFFY_EP_NAME    – episode name (empty for movies)
+#   LUFFY_PROVIDER   – provider name
+#   LUFFY_ACTION     – "play" or "download"
+#   LUFFY_STREAM_URL – resolved stream URL
+#   LUFFY_POSITION   – playback position in seconds (on_exit only)
+#
+# hooks:
+#   # Run just before the player launches.
+#   on_play: 'notify-send "Now playing" "$LUFFY_TITLE"'
+#
+#   # Run after the player exits.
+#   on_exit: 'echo "$LUFFY_TITLE stopped at ${LUFFY_POSITION}s" >> ~/luffy.log'
+#
+#   # Run just before a download starts.
+#   on_download: 'notify-send "Downloading" "$LUFFY_TITLE"'

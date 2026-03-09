@@ -56,7 +56,9 @@ luffy/
 │   ├── m3u8.go              # Quality selection from master m3u8 playlists
 │   ├── history.go           # SQLite watch history (OpenHistory, AddEntry, ListShows)
 │   ├── recommend.go         # Taste-profile recommendation engine
-│   ├── player.go            # Video player integration
+│   ├── player.go            # Video player integration + lifecycle hooks
+│   ├── hooks.go             # Hook runner (HookContext, RunHook, hookEnv)
+│   ├── input.go             # fzf wrappers with terminal save/restore
 │   ├── http.go              # HTTP client helpers
 │   └── providers/           # Provider implementations
 │       ├── flixhq.go        # Default provider
@@ -66,6 +68,7 @@ luffy/
 │       ├── hdrezka.go       # Experimental
 │       └── youtube.go
 ├── docs/
+│   ├── hooks.md             # Hooks & MpvArgs documentation
 │   └── recommendation.md    # Recommendation engine documentation
 └── main.go                  # Entry point
 ```
@@ -148,7 +151,85 @@ type episodeWithNum struct {
 
 Never use `epIdx + 1` from the `episodesToProcess` loop — that re-indexes from 0 and is wrong when episodes are a subset of the season.
 
-## Recommendation Engine (core/recommend.go)
+## Hooks & MpvArgs (core/hooks.go, core/config.go)
+
+See `docs/hooks.md` for full details.
+
+### Summary
+
+Luffy supports user-defined shell commands that run at three playback lifecycle points. Hooks are executed via `sh -c` on Unix and `cmd /c` on Windows, blocking until complete. Failures are printed but never abort playback — hooks are best-effort.
+
+### HookContext
+
+Every hook call receives a `HookContext` that is translated into `LUFFY_*` environment variables:
+
+```go
+type HookContext struct {
+    Title     string
+    URL       string  // provider media URL
+    Season    int     // 0 for movies
+    Episode   int     // 0 for movies
+    EpName    string
+    Provider  string
+    Action    string  // "play" or "download"
+    StreamURL string  // resolved stream URL
+    Position  float64 // playback position in seconds (on_exit only)
+}
+```
+
+| Env Var | Source field |
+|---------|-------------|
+| `LUFFY_TITLE` | `Title` |
+| `LUFFY_URL` | `URL` |
+| `LUFFY_SEASON` | `Season` |
+| `LUFFY_EPISODE` | `Episode` |
+| `LUFFY_EP_NAME` | `EpName` |
+| `LUFFY_PROVIDER` | `Provider` |
+| `LUFFY_ACTION` | `Action` |
+| `LUFFY_STREAM_URL` | `StreamURL` |
+| `LUFFY_POSITION` | `Position` |
+
+### Lifecycle Events
+
+| Hook | Config key | When it fires |
+|------|-----------|---------------|
+| on_play | `hooks.on_play` | Just before the player process is launched |
+| on_exit | `hooks.on_exit` | Immediately after the player process exits |
+| on_download | `hooks.on_download` | Just before a download starts (yt-dlp or native) |
+
+### MpvArgs
+
+`cfg.MpvArgs` (`[]string`, yaml: `mpv_args`) is appended verbatim to the mpv command line after all built-in flags. Ignored on VLC, IINA, and Android.
+
+### Config Schema
+
+```yaml
+mpv_args:
+  - "--hwdec=auto"
+  - "--volume=80"
+
+hooks:
+  on_play: 'notify-send "Now playing" "$LUFFY_TITLE"'
+  on_exit: 'echo "$LUFFY_TITLE stopped at ${LUFFY_POSITION}s" >> ~/luffy.log'
+  on_download: 'notify-send "Downloading" "$LUFFY_TITLE"'
+```
+
+### Key Functions
+
+```go
+// RunHook executes a shell command string with LUFFY_* env vars set.
+// No-op if command is "". Errors are printed, never fatal.
+func RunHook(command string, hctx HookContext, debug bool)
+
+// hookEnv converts a HookContext to a []string of KEY=VALUE pairs.
+func hookEnv(hctx HookContext) []string
+```
+
+### Wiring in cmd/root.go
+
+Call sites must build and pass a `HookContext` to `Play` and `PlayWithControls`. The `on_download` hook is fired inside `buildProcessStream` before `Download`/`DownloadYTDLP`. Always populate `Title`, `URL`, `Provider`, `Season`, `Episode`, `EpName` at the call site — these fields cannot be inferred inside `player.go`.
+
+
 
 See `docs/recommendation.md` for full details.
 
@@ -483,6 +564,9 @@ if strings.EqualFold(providerName, "sflix") || strings.EqualFold(providerName, "
 - **Quality default is fzf prompt** - `cfg.Quality` defaults to `""`, not `"best"`. Only `--best` flag or explicit `quality: best` in config bypasses the prompt
 - **Always pass Referer to GetQualities** - CDNs enforce Referer; missing it silently breaks quality selection
 - **Episode numbers** - Never use loop index `epIdx+1` from `episodesToProcess`; use `episodeWithNum.num` which carries the correct number from the selection point
+- **Hooks are best-effort** - `RunHook` prints errors but never aborts playback or download
+- **HookContext must be built at the call site** - `Play` and `PlayWithControls` cannot infer `Title`, `URL`, `Provider`, `Season`, `Episode`, `EpName`; always populate them before calling
+- **MpvArgs only apply to mpv** - `cfg.MpvArgs` is ignored when the player is VLC, IINA, or Android Activity Manager
 
 ## Dependencies
 
@@ -490,6 +574,7 @@ if strings.EqualFold(providerName, "sflix") || strings.EqualFold(providerName, "
 - `github.com/spf13/cobra` - CLI framework
 - `gopkg.in/yaml.v3` - Config parsing
 - `modernc.org/sqlite` - CGO-free SQLite driver (required — all builds use `CGO_ENABLED=0`)
+- `golang.org/x/term` - Terminal state save/restore (used in `core/input.go` to fix terminal corruption after fzf is killed)
 
 ## Resources
 
