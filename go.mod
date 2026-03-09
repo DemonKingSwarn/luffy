@@ -26,7 +26,11 @@ require (
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
-	modernc.org/libc v1.67.6 // indirect
+	modernc.org/libc v1.70.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace modernc.org/libc => ./vendor-patches/modernc.org/libc
+
+replace modernc.org/sqlite => ./vendor-patches/modernc.org/sqlite

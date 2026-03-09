@@ -3,7 +3,7 @@ binary_name := "luffy"
 flags       := "-s -w"
 build_dir   := "builds"
 
-build: windows-amd64 windows-386 windows-arm linux-amd64 linux-386 linux-arm android mac-arm mac-intel
+build: windows-amd64 windows-386 windows-arm linux-amd64 linux-386 linux-arm android mac-arm mac-intel freebsd-amd64 freebsd-386
 
 _build os arch ext="":
     @echo "Building {{os}}/{{arch}}..."
