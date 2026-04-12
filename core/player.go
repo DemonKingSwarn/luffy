@@ -240,7 +240,10 @@ func Play(url, title, referer, userAgent string, subtitles []string, debug bool,
 	if socketPath != "" {
 		client := connectMPVIPC(socketPath)
 		if client != nil {
-			defer client.Close()
+			defer func() {
+				defer func() { recover() }()
+				client.Close()
+			}()
 			var mu sync.Mutex
 			stop := make(chan struct{})
 			go func() {
@@ -424,7 +427,12 @@ func PlayWithControls(url, title, referer, userAgent string, subtitles []string,
 				lastPos = pos
 				posMu.Unlock()
 			}
-			ipcClient.Close()
+			// gopv panics with "close of closed channel" if the mpv process
+			// already exited and tore down the IPC socket; recover gracefully.
+			func() {
+				defer func() { recover() }()
+				ipcClient.Close()
+			}()
 		}
 		if socketPath != "" {
 			posMu.Lock()
