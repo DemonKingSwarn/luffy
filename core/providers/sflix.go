@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	SFLIX_BASE_URL   = "https://sflixto.uk"
+	SFLIX_BASE_URL   = "https://sflix.to"
 	SFLIX_SEARCH_URL = SFLIX_BASE_URL + "/search"
 	SFLIX_AJAX_URL   = SFLIX_BASE_URL + "/ajax"
 )
