@@ -94,19 +94,44 @@ func buildPlayerCmd(url, title, referer, userAgent string, subtitles []string, d
 
 	switch runtime.GOOS {
 	case "darwin":
-		args := []string{
-			"--no-stdin",
-			"--keep-running",
-			fmt.Sprintf("--mpv-referrer=%s", referer),
-			fmt.Sprintf("--mpv-user-agent=%s", userAgent),
-			url,
-			fmt.Sprintf("--mpv-force-media-title=Playing %s", title),
+		if cfg.Player == "mpv" {
+			// Default to mpv.
+			args := []string{
+				url,
+				fmt.Sprintf("--referrer=%s", referer),
+				fmt.Sprintf("--user-agent=%s", userAgent),
+				fmt.Sprintf("--force-media-title=Playing %s", title),
+			}
+			for _, sub := range subtitles {
+				if sub != "" {
+					args = append(args, fmt.Sprintf("--sub-file=%s", sub))
+				}
+			}
+			// IPC socket for position tracking via gopv.
+			if socketPath != "" {
+				args = append(args, fmt.Sprintf("--input-ipc-server=%s", socketPath))
+			}
+			// Resume from saved position (seconds).
+			if startSecs > 0 {
+				args = append(args, fmt.Sprintf("--start=%s", strconv.FormatFloat(startSecs, 'f', 3, 64)))
+			}
+			// Append extra user-configured mpv args.
+			args = append(args, cfg.MpvArgs...)
+			cmd = exec.Command(mpv_executable, args...)
+		} else {
+			args := []string{
+				"--no-stdin",
+				"--keep-running",
+				fmt.Sprintf("--mpv-referrer=%s", referer),
+				fmt.Sprintf("--mpv-user-agent=%s", userAgent),
+				url,
+				fmt.Sprintf("--mpv-force-media-title=Playing %s", title),
+			}
+			for _, sub := range subtitles {
+				args = append(args, fmt.Sprintf("--mpv-sub-files=%s", sub))
+			}
+			cmd = exec.Command("iina", args...)
 		}
-		for _, sub := range subtitles {
-			args = append(args, fmt.Sprintf("--mpv-sub-files=%s", sub))
-		}
-		cmd = exec.Command("iina", args...)
-
 	default:
 		if cfg.Player == "vlc" {
 			args := []string{

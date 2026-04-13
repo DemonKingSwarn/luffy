@@ -291,6 +291,7 @@ You can set the default provider in the config file (`~/.config/luffy/config.yam
 | Braflix | `braflix` | |
 | Movies4u | `movies4u` | Bollywood only |
 | YouTube | `youtube` | Streams/downloads via yt-dlp |
+| Allanime | `allanime` | For anime |
 | HDRezka | `hdrezka` | Experimental — may not always work |
 
 Example config:
