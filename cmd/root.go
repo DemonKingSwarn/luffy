@@ -88,6 +88,10 @@ var rootCmd = &cobra.Command{
 			provider = providers.NewMovies4u(client)
 		} else if strings.EqualFold(providerName, "youtube") {
 			provider = providers.NewYouTube(client)
+		} else if strings.EqualFold(providerName, "allanime") {
+			provider = providers.NewAllAnime(client)
+		} else if strings.EqualFold(providerName, "allanime-dub") {
+			provider = providers.NewAllAnimeDub(client)
 		} else {
 			provider = providers.NewFlixHQ(client)
 		}
@@ -139,6 +143,10 @@ var rootCmd = &cobra.Command{
 				histProvider = providers.NewMovies4u(client)
 			case "youtube":
 				histProvider = providers.NewYouTube(client)
+			case "allanime":
+				histProvider = providers.NewAllAnime(client)
+			case "allanime-dub":
+				histProvider = providers.NewAllAnimeDub(client)
 			default:
 				histProvider = providers.NewFlixHQ(client)
 			}
@@ -775,6 +783,9 @@ func resolveStreamURL(
 	if strings.EqualFold(providerName, "hdrezka") {
 		referer = ctx.URL
 	}
+	if strings.EqualFold(providerName, "allanime") || strings.EqualFold(providerName, "allanime-dub") {
+		referer = "https://allmanga.to"
+	}
 
 	if strings.EqualFold(providerName, "hdrezka") {
 		streams := strings.Split(link, ",")
@@ -801,7 +812,8 @@ func resolveStreamURL(
 		if streamURL == "" {
 			streamURL = link
 		}
-	} else if strings.EqualFold(providerName, "movies4u") || strings.EqualFold(providerName, "youtube") {
+	} else if strings.EqualFold(providerName, "movies4u") || strings.EqualFold(providerName, "youtube") ||
+		strings.EqualFold(providerName, "allanime") || strings.EqualFold(providerName, "allanime-dub") {
 		streamURL = link
 	} else {
 		if debugMode {
