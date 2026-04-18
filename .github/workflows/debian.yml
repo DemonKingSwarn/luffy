@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - ".github/workflows/debian.yml"
+      - "packaging/debian/generate-data.sh"
   workflow_dispatch:
 
 permissions:

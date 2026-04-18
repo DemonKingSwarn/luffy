@@ -23,8 +23,9 @@ Build-Depends: debhelper-compat (= 13), golang-go
 Standards-Version: 4.6.2
 Homepage: https://github.com/demonkingswarn/luffy
 Rules-Requires-Root: no
+
 Package: ${PKG}
-Architecture: any
+Architecture: amd64
 Depends: \${misc:Depends}, libsixel-bin, chafa, mpv, fzf, yt-dlp, ffmpeg
 Description: Watch movies and series from the terminal
  Spiritual successor of flix-cli and mov-cli.
