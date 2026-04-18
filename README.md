@@ -67,7 +67,7 @@ paru -S luffy-bin
 ```sh
 sudo apt-get -y install libsixel-bin chafa yt-dlp mpv ffmpeg fzf
 wget "https://github.com/DemonKingSwarn/luffy/releases/download/v1.1.4/luffy-1.1.4-amd64.deb"
-dpkg -i luffy-1.1.4-amd64.deb
+sudo dpkg -i ./luffy-1.1.4-amd64.deb
 ```
 
 ### 3. Fedora
@@ -128,7 +128,7 @@ Install termux [(Guide)](https://termux.com/)
 ```sh
 pkg up -y
 pkg in fzf python-yt-dlp
-curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.1.0/luffy-android-arm64" -o $PREFIX/bin/luffy
+curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.1.4/luffy-android-arm64" -o $PREFIX/bin/luffy
 chmod +x $PREFIX/bin/luffy
 ```
 
