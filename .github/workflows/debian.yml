@@ -19,7 +19,7 @@ jobs:
       - name: install lesbian build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential dbhelper libsixel-bin chafa fzf golang yt-dlp ffmpeg upx-ucl
+          sudo apt-get install -y build-essential debhelper libsixel-bin chafa fzf golang yt-dlp ffmpeg upx-ucl
           curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/sbin
 
       - name: generate lesbian data
