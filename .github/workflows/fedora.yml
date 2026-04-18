@@ -1,0 +1,43 @@
+name: Fedora
+
+on:
+  push:
+    paths:
+      - ".github/workflows/fedora.yml"
+      - "packaging/fedora/generate-data.sh"
+      - "packaging/fedora/luffy.spec"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fedora:
+    runs-on: ubuntu-latest
+    container:
+      # GitHub Actions host is Ubuntu, but the build itself runs inside Fedora.
+      image: registry.fedoraproject.org/fedora:42
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install rpm build tools
+        run: dnf install -y git golang rpm-build rpmdevtools
+
+      - name: generate fedora data
+        run: bash ./packaging/fedora/generate-data.sh
+
+      - name: fetch sources
+        run: spectool -g -R packaging/fedora/luffy.spec
+
+      - name: build rpm
+        run: rpmbuild -ba packaging/fedora/luffy.spec
+
+      - name: collect artifacts
+        run: |
+          cp -v ~/rpmbuild/RPMS/*/*.rpm luffy-1.1.4.rpm
+
+      - name: upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: luffy-rpm
+          path: luffy-1.1.4.rpm

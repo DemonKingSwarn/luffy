@@ -62,8 +62,23 @@
 paru -S luffy-bin
 ```
 
+### 2. Debian-based or Ubuntu-based
 
-### 2. MacOS
+```sh
+sudo apt-get -y install libsixel-bin chafa yt-dlp mpv ffmpeg fzf
+wget "https://github.com/DemonKingSwarn/luffy/releases/download/v1.1.4/luffy-1.1.4-amd64.deb"
+dpkg -i luffy-1.1.4-amd64.deb
+```
+
+### 3. Fedora
+
+```sh
+sudo dnf -y install chafa yt-dlp mpv ffmpeg fzf
+wget "https://github.com/DemonKingSwarn/luffy/releases/download/v1.1.4/luffy-1.1.4-amd64.rpm"
+sudo dnf install ./luffy-1.1.4-amd64.rpm
+```
+
+### 4. MacOS
 
 ```sh
 brew tap gamedevCloudy/tools
@@ -71,7 +86,7 @@ brew install --cask iina
 brew install luffy
 ```
 
-### 3. Windows
+### 5. Windows
 
 Make sure you have [scoop.sh](https://scoop.sh) installed on your system.
 
@@ -84,7 +99,7 @@ scoop install luffy
 > [!IMPORTANT]
 > On windows if you want to use the `--show-image`, you need to use the `wezterm` terminal emulator. It is installed as a dependency on windows.
 
-### 4. Go Install
+### 6. Go Install
 
 If you have Go installed, you can easily install Luffy:
 
@@ -92,7 +107,7 @@ If you have Go installed, you can easily install Luffy:
 go install github.com/demonkingswarn/luffy@latest
 ```
 
-### 5. Build from Source
+### 7. Build from Source
 
 1.  Clone the repository:
     ```bash
@@ -106,7 +121,7 @@ go install github.com/demonkingswarn/luffy@latest
     ```
     *Ensure your `$GOPATH/bin` is in your system's `PATH`.*
 
-### 6. Android Installation
+### 8. Android Installation
 
 Install termux [(Guide)](https://termux.com/)
 
