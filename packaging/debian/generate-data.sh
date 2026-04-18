@@ -37,6 +37,7 @@ include /usr/share/dpkg/pkg-info.mk
 export DH_GOPKG := github.com/demonkingswarn/luffy
 export GOFLAGS := -trimpath
 export GO111MODULE := on
+export GOTOOLCHAIN := local
 %:
 	dh $@ --buildsystem=golang
 override_dh_auto_build:
