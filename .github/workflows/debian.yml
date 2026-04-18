@@ -2,10 +2,9 @@ name: Release
 
 on:
   push:
-    paths:
-      - ".github/workflows/debian.yml"
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -38,5 +37,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ../*.deb
-
 
