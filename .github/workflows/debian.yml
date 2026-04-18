@@ -1,0 +1,41 @@
+name: Release
+ 
+on:
+  push:
+    paths:
+      - ".github/workflows/debian.yml"
+    tags:
+      - "v"
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+
+lesbian:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+
+    - name: install lesbian build tools
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y libsixel-bin chafa fzf golang yt-dlp ffmpeg upx-ucl
+      curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/sbin
+
+    - name: generate lesbian data
+    run: bash ./packaging/debian/generate-data.sh
+
+    - name: prepare lesbian directory
+    run: cp -r packaging/debian debian
+
+    - name: build lesbian package
+    run: |
+      export DEB_BUILD_OPTIONS="nocheck"
+      dpkg-buildpackage -us -uc -b
+
+    - name: upload lesbian package
+    uses: softprops/action-gh-release@v2
+    with:
+      files: ../*.deb
