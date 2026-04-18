@@ -39,6 +39,7 @@ jobs:
       - name: upload lesbian package
         uses: actions/upload-artifact@v4
         with:
-          files: ../*.deb
+          name: luffy-deb
+          path: ../*.deb
 
 
