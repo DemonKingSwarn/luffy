@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    paths:
+      - ".github/workflows/debian.yml"
   workflow_dispatch:
 
 permissions:
@@ -37,4 +37,3 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ../*.deb
-
