@@ -35,11 +35,12 @@ jobs:
         run: |
           export DEB_BUILD_OPTIONS="nocheck"
           dpkg-buildpackage -us -uc -b
+          cp ../*.deb luffy-1.1.4.deb
 
       - name: upload lesbian package
         uses: actions/upload-artifact@v4
         with:
           name: luffy-deb
-          path: ../*.deb
+          path: luffy-1.1.4.deb
 
 
