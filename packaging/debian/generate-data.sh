@@ -45,8 +45,15 @@ export GOTOOLCHAIN := local
 override_dh_auto_build:
 	just linux-amd64
 
+
 override_dh_auto_install:
 	install -D -m 0755 builds/luffy-linux-amd64 debian/luffy/usr/bin/luffy
+
+override_dh_strip:
+  # binary already stripped
+
+override_dh_dwz:
+  # skip, no debug section
 EOF
 chmod +x debian/rules
 # -------- compat: removed, debhelper-compat in Build-Depends handles this --------
