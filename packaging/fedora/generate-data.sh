@@ -12,6 +12,7 @@ Name:           ${PKG}
 Version:        ${VERSION}
 Release:        ${RELEASE}%{?dist}
 Summary:        Watch movies and series from the terminal
+%global debug_package %{nil}
 
 License:        GPL-3.0-or-later
 URL:            https://github.com/demonkingswarn/luffy
@@ -48,6 +49,10 @@ install -Dpm0755 %{name} %{buildroot}%{_bindir}/%{name}
 %license LICENSE
 %doc README.md
 %{_bindir}/%{name}
+
+%changelog
+* Sat Apr 18 2026 Swarnaditya Singh <swarnadityasingh@pm.me> - 1.1.4-1
+- Initial Fedora package
 EOF
 
 chmod 0644 packaging/fedora/luffy.spec
