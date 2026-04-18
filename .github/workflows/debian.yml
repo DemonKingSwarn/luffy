@@ -2,6 +2,8 @@ name: Release
 
 on:
   push:
+    paths:
+      - ".github/workflows/debian.yml"
     tags:
       - "v*"
 
