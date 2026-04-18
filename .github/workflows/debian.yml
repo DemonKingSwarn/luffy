@@ -1,35 +1,44 @@
 name: Release
+
 on:
   push:
     paths:
       - ".github/workflows/debian.yml"
       - "packaging/debian/generate-data.sh"
   workflow_dispatch:
+
 permissions:
   id-token: write
   contents: write
+
 jobs:
   lesbian:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: install lesbian build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential debhelper dh-golang libsixel-bin chafa fzf yt-dlp ffmpeg upx-ucl
+          sudo apt-get install -y build-essential debhelper dh-golang libsixel-bin chafa fzf golang yt-dlp ffmpeg upx-ucl
           curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/sbin
           curl -fsSL https://go.dev/dl/go1.25.0.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
           echo "/usr/local/go/bin" >> $GITHUB_PATH
+
       - name: generate lesbian data
         run: bash ./packaging/debian/generate-data.sh
+
       - name: prepare lesbian directory
         run: cp -r packaging/debian debian
+
       - name: build lesbian package
         run: |
           export DEB_BUILD_OPTIONS="nocheck"
           dpkg-buildpackage -us -uc -b
+
       - name: upload lesbian package
         uses: actions/upload-artifact@v4
         with:
-          name: luffy-deb
-          path: ../*.deb
+          files: ../*.deb
+
+
