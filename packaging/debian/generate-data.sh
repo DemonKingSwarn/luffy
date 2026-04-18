@@ -38,12 +38,15 @@ export DH_GOPKG := github.com/demonkingswarn/luffy
 export GOFLAGS := -trimpath
 export GO111MODULE := on
 export GOTOOLCHAIN := local
+
 %:
 	dh $@ --buildsystem=golang
+
 override_dh_auto_build:
-	go build -trimpath -ldflags="-s -w" -o debian/luffy .
+	just linux-amd64
+
 override_dh_auto_install:
-	install -D -m 0755 debian/luffy debian/luffy/usr/bin/luffy
+	install -D -m 0755 builds/luffy-linux-amd64 debian/luffy/usr/bin/luffy
 EOF
 chmod +x debian/rules
 # -------- compat: removed, debhelper-compat in Build-Depends handles this --------
