@@ -79,9 +79,18 @@ sudo apt install -y luffy
 ### 3. Fedora
 
 ```sh
-sudo dnf -y install chafa yt-dlp mpv ffmpeg fzf
-wget "https://github.com/DemonKingSwarn/luffy/releases/download/v1.1.4/luffy-1.1.4-amd64.rpm"
-sudo dnf install ./luffy-1.1.4-amd64.rpm
+sudo cat > /etc/yum.repos.d/fedmon-repo.repo << 'EOF'
+[fedmon-repo]
+name=fedmon-repo
+baseurl=https://demonkingswarn.is-a.dev/fedmon-repo/rpms
+enabled=1
+gpgcheck=1
+gpgkey=https://demonkingswarn.is-a.dev/fedmon-repo/pubkey.gpg
+EOF
+
+sudo dnf update
+
+sudo dnf install -y luffy
 ```
 
 ### 4. MacOS
