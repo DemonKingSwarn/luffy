@@ -8,7 +8,7 @@ build: windows-amd64 windows-386 windows-arm linux-amd64 linux-386 linux-arm and
 _build os arch ext="":
     @echo "Building {{os}}/{{arch}}..."
     mkdir -p {{build_dir}}
-    GOOS={{os}} GOARCH={{arch}} CGO_ENABLED=0 go build -ldflags={{quote(flags)}} -o {{build_dir}}/{{binary_name}}-{{os}}-{{arch}}{{ext}}
+    GOOS={{os}} GOARCH={{arch}} CGO_ENABLED=0 go build -trimpath -ldflags={{quote(flags)}} -o {{build_dir}}/{{binary_name}}-{{os}}-{{arch}}{{ext}}
 
 _compress path:
     @upx --best --lzma {{path}} || echo "UPX skip: {{path}}"

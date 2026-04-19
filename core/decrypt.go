@@ -309,6 +309,9 @@ func DecryptMegacloud(urlStr string, client *http.Client) (string, []string, str
 
 	clientKey := extractMegacloudClientKey(bodyStr)
 	if clientKey == "" {
+		clientKey = extractMegacloudClientKeyFromPage(bodyStr)
+	}
+	if clientKey == "" {
 		return "", nil, "", fmt.Errorf("could not extract client key from megacloud page")
 	}
 
@@ -420,11 +423,11 @@ func DecryptMegacloud(urlStr string, client *http.Client) (string, []string, str
 
 func extractMegacloudClientKey(html string) string {
 	patterns := []string{
-		`<meta\s+name="_gg_fb"\s+content="([^"]+)"`,
-		`window\._xy_ws\s*=\s*"([^"]+)"`,
-		`window\._xy_ws\s*=\s*'([^']+)'`,
+		`<meta[^>]+name=["']_gg_fb["'][^>]+content=["']([^"']+)["']`,
+		`window\._xy_ws\s*=\s*["']([^"']+)["']`,
+		`window\._xy_ws\s*=\s*([^;\n<]+)`,
 		`<!--\s*_is_th:([0-9a-zA-Z]+)\s+-->`,
-		`<div[^>]+data-dpi="([^"]+)"`,
+		`<div[^>]+data-dpi=["']([^"']+)["']`,
 	}
 
 	for _, pattern := range patterns {
@@ -435,10 +438,29 @@ func extractMegacloudClientKey(html string) string {
 		}
 	}
 
-	lkDbRe := regexp.MustCompile(`window\._lk_db\s*=\s*\{[^}]*x:\s*"([^"]+)"[^}]*y:\s*"([^"]+)"[^}]*z:\s*"([^"]+)"[^}]*\}`)
+	lkDbRe := regexp.MustCompile(`window\._lk_db\s*=\s*\{(?s:[^}]*)x:\s*["']([^"']+)["'](?s:[^}]*)y:\s*["']([^"']+)["'](?s:[^}]*)z:\s*["']([^"']+)["'](?s:[^}]*)\}`)
 	matches := lkDbRe.FindStringSubmatch(html)
 	if len(matches) > 3 {
 		return matches[1] + matches[2] + matches[3]
+	}
+
+	return ""
+}
+
+func extractMegacloudClientKeyFromPage(html string) string {
+	pagePatterns := []string{
+		`clientKey\s*[:=]\s*["']([^"']+)["']`,
+		`_clientKey\s*[:=]\s*["']([^"']+)["']`,
+		`key\s*[:=]\s*["']([^"']{8,})["']`,
+		`<script[^>]*>.*?window\._xy_ws\s*=\s*["']([^"']+)["'].*?</script>`,
+	}
+
+	for _, pattern := range pagePatterns {
+		re := regexp.MustCompile(`(?s)` + pattern)
+		matches := re.FindStringSubmatch(html)
+		if len(matches) > 1 {
+			return strings.TrimSpace(matches[1])
+		}
 	}
 
 	return ""

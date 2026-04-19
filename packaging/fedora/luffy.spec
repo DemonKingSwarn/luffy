@@ -1,5 +1,5 @@
 Name:           luffy
-Version:        1.1.4
+Version:        1.1.5
 Release:        1%{?dist}
 Summary:        Watch movies and series from the terminal
 %global debug_package %{nil}
