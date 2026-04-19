@@ -39,18 +39,27 @@
 ## Overview
 
 - [Installation](#installation)
-    - [Arch Linux](#1-arch-linux)
-    - [Debian-based or Ubuntu-based](#2-debian-based-or-ubuntu-based)
-    - [Fedora](#3-fedora)
-    - [MacOS](#4-macos)
-    - [Windows](#5-windows)
-    - [Go Install](#6-go-install)
-    - [Build from Source](#7-build-from-source)
-    - [Android Installation](#8-android-installation)
+  - [Arch Linux](#1-arch-linux)
+  - [NixOS / Nix](#2-nixos--nix)
+    - [Run without installing](#run-without-installing)
+    - [Install into profile](#install-into-profile)
+    - [NixOS flake input](#nixos-flake-input)
+  - [Debian-based or Ubuntu-based](#2-debian-based-or-ubuntu-based)
+  - [Fedora](#3-fedora)
+  - [MacOS](#5-macos)
+  - [Windows](#6-windows)
+  - [Go Install](#7-go-install)
+  - [Build from Source](#8-build-from-source)
+  - [Android Installation](#9-android-installation)
 - [Dependencies](#dependencies)
 - [Usage](#usage)
+  - [Flags](#flags)
+  - [Playback Controls](#playback-controls)
+  - [Examples](#examples)
 - [Configuration](#configuration)
 - [Hooks & MpvArgs](#hooks--mpvargs)
+  - [MpvArgs](#mpvargs)
+  - [Hooks](#hooks)
 - [Providers](#providers)
 
  > [!NOTE] 
@@ -64,7 +73,26 @@
 paru -S luffy-bin
 ```
 
-### 2. Debian-based or Ubuntu-based
+### 2. NixOS / Nix
+
+#### Run without installing
+```bash
+nix run github:DemonKingSwarn/luffy
+```
+
+#### Install into profile
+```bash
+nix profile install github:DemonKingSwarn/luffy
+```
+
+#### NixOS flake input
+```nix
+inputs.luffy.url = "github:DemonKingSwarn/luffy";
+
+environment.systemPackages = [ inputs.luffy.packages.${system}.luffy ];
+```
+
+### 3. Debian-based or Ubuntu-based
 
 ```sh
 curl -fsSL https://demonkingswarn.is-a.dev/debmon-repo/pubkey.gpg | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/debmon-repo.gpg
@@ -76,7 +104,7 @@ sudo apt update
 sudo apt install -y luffy
 ```
 
-### 3. Fedora
+### 4. Fedora
 
 ```sh
 echo '[fedmon-repo]
@@ -91,7 +119,7 @@ sudo dnf update
 sudo dnf install -y luffy
 ```
 
-### 4. MacOS
+### 5. MacOS
 
 ```sh
 brew tap gamedevCloudy/tools
@@ -99,7 +127,7 @@ brew install --cask iina
 brew install luffy
 ```
 
-### 5. Windows
+### 6. Windows
 
 Make sure you have [scoop.sh](https://scoop.sh) installed on your system.
 
@@ -112,7 +140,7 @@ scoop install luffy
 > [!IMPORTANT]
 > On windows if you want to use the `--show-image`, you need to use the `wezterm` terminal emulator. It is installed as a dependency on windows.
 
-### 6. Go Install
+### 7. Go Install
 
 If you have Go installed, you can easily install Luffy:
 
@@ -120,7 +148,7 @@ If you have Go installed, you can easily install Luffy:
 go install github.com/demonkingswarn/luffy@latest
 ```
 
-### 7. Build from Source
+### 8. Build from Source
 
 1.  Clone the repository:
     ```bash
@@ -134,7 +162,7 @@ go install github.com/demonkingswarn/luffy@latest
     ```
     *Ensure your `$GOPATH/bin` is in your system's `PATH`.*
 
-### 8. Android Installation
+### 9. Android Installation
 
 Install termux [(Guide)](https://termux.com/)
 
