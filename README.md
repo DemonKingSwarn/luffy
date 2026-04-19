@@ -67,9 +67,13 @@ paru -S luffy-bin
 ### 2. Debian-based or Ubuntu-based
 
 ```sh
-sudo apt-get -y install libsixel-bin chafa yt-dlp mpv ffmpeg fzf
-wget "https://github.com/DemonKingSwarn/luffy/releases/download/v1.1.4/luffy-1.1.4-amd64.deb"
-sudo dpkg -i ./luffy-1.1.4-amd64.deb
+curl -fsSL https://demonkingswarn.is-a.dev/debmon-repo/pubkey.gpg | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/debmon-repo.gpg
+
+echo "deb [arch=amd64] https://demonkingswarn.is-a.dev/debmon-repo stable main" | sudo tee /etc/apt/sources.list.d/debmon-repo.list
+
+sudo apt update
+
+sudo apt install -y luffy
 ```
 
 ### 3. Fedora
