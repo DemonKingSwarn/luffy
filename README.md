@@ -79,14 +79,12 @@ sudo apt install -y luffy
 ### 3. Fedora
 
 ```sh
-sudo cat > /etc/yum.repos.d/fedmon-repo.repo << 'EOF'
-[fedmon-repo]
+echo '[fedmon-repo]
 name=fedmon-repo
 baseurl=https://demonkingswarn.is-a.dev/fedmon-repo/rpms
 enabled=1
 gpgcheck=1
-gpgkey=https://demonkingswarn.is-a.dev/fedmon-repo/pubkey.gpg
-EOF
+gpgkey=https://demonkingswarn.is-a.dev/fedmon-repo/pubkey.gpg' | sudo tee /etc/yum.repos.d/fedmon-repo.repo
 
 sudo dnf update
 
