@@ -13,7 +13,7 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
 
-          version = "1.1.4";
+          version = "1.1.5";
 
           binaryName = {
             "x86_64-linux"  = "luffy-linux-amd64";
@@ -23,10 +23,10 @@
           }.${system};
 
           sha256 = {
-            "x86_64-linux"  = "sha256-HGH3YeDAAsvbU2lgYQVcBx3JZKuu3rCMKdRI1unCmR0=";
-            "aarch64-linux" = "sha256-jk1OQOR1XYXNxp4b6pw1eYhODFENupipeh+a8vmR/1Y=";
-            "x86_64-darwin" = "sha256-hWU0BXTjL/xAmq7tTrsLzA1DK7YBi+DlnkyojkbNAsI=";
-            "aarch64-darwin" = "sha256-qhu46Iztq8TyanG932ZI8KvDE9c6nXbX6OQG5hnRvjE=";
+            "x86_64-linux"  = "sha256-Z7ZuKqyeMdQW/cZlcZUery4Os9TD48LfPPimmcnNVKw=";
+            "aarch64-linux" = "sha256-E8JrwSzoxk4qpXsM3nswXc3aWEUs2V4FOtDAJecMOeE=";
+            "x86_64-darwin" = "sha256-wjqId9lr4KkGTA2JqpXSuc2yT5Z+cbdzGmX+OvYgsOc=";
+            "aarch64-darwin" = "sha256-a0lTNzMKrS7WCdYJ9qu6yYgA4ULzaZrlbDIjb76NiW4=";
           }.${system};
 
         in

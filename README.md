@@ -166,7 +166,7 @@ Install termux [(Guide)](https://termux.com/)
 ```sh
 pkg up -y
 pkg in fzf python-yt-dlp
-curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.1.4/luffy-android-arm64" -o $PREFIX/bin/luffy
+curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.1.5/luffy-android-arm64" -o $PREFIX/bin/luffy
 chmod +x $PREFIX/bin/luffy
 ```
 
