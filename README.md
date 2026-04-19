@@ -40,10 +40,7 @@
 
 - [Installation](#installation)
   - [Arch Linux](#1-arch-linux)
-  - [NixOS / Nix](#2-nixos--nix)
-    - [Run without installing](#run-without-installing)
-    - [Install into profile](#install-into-profile)
-    - [NixOS flake input](#nixos-flake-input)
+  - [NixOS / Nix / MacOS](#2-nixos--nix--macos)
   - [Debian-based or Ubuntu-based](#2-debian-based-or-ubuntu-based)
   - [Fedora](#3-fedora)
   - [MacOS](#5-macos)
@@ -73,7 +70,7 @@
 paru -S luffy-bin
 ```
 
-### 2. NixOS / Nix
+### 2. NixOS / Nix / MacOS
 
 #### Run without installing
 ```bash

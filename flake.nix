@@ -5,7 +5,7 @@
 
   outputs = { self, nixpkgs }:
     let
-      systems = [ "x86_64-linux" "aarch64-linux" ];
+      systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
     in
     {
@@ -18,11 +18,15 @@
           binaryName = {
             "x86_64-linux"  = "luffy-linux-amd64";
             "aarch64-linux" = "luffy-linux-arm64";
+            "x86_64-darwin" = "luffy-darwin-amd64";
+            "aarch64-darwin" = "luffy-darwin-arm64";
           }.${system};
 
           sha256 = {
             "x86_64-linux"  = "sha256-HGH3YeDAAsvbU2lgYQVcBx3JZKuu3rCMKdRI1unCmR0=";
             "aarch64-linux" = "sha256-jk1OQOR1XYXNxp4b6pw1eYhODFENupipeh+a8vmR/1Y=";
+            "x86_64-darwin" = "sha256-hWU0BXTjL/xAmq7tTrsLzA1DK7YBi+DlnkyojkbNAsI=";
+            "aarch64-darwin" = "sha256-qhu46Iztq8TyanG932ZI8KvDE9c6nXbX6OQG5hnRvjE=";
           }.${system};
 
         in
@@ -58,7 +62,7 @@
               homepage    = "https://github.com/DemonKingSwarn/luffy";
               license     = licenses.gpl3Only;
               maintainers = [ ];
-              platforms   = [ "x86_64-linux" "aarch64-linux" ];
+              platforms   = with platforms; linux ++ darwin;
               mainProgram = "luffy";
             };
           };
