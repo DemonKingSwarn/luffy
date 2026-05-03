@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const TMDB_API_KEY = "55cae805087aa49cc82cf404e0449254"
+const TMDB_API_KEY = ""
 
 type tmdbSearchResponse struct {
 	Results []struct {
