@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -15,6 +16,43 @@ import (
 
 var mpv_executable string = "mpv"
 var vlc_executable string = "vlc"
+
+func formatCommand(cmd *exec.Cmd) string {
+	if cmd == nil {
+		return ""
+	}
+
+	parts := make([]string, 0, 1+len(cmd.Args))
+	for i, part := range cmd.Args {
+		if i == 0 {
+			parts = append(parts, quoteCommandArg(part))
+			continue
+		}
+		parts = append(parts, quoteCommandArg(part))
+	}
+
+	return strings.Join(parts, " ")
+}
+
+func quoteCommandArg(arg string) string {
+	if arg == "" {
+		return `""`
+	}
+	if strings.ContainsAny(arg, " \t\n\"") {
+		return strconv.Quote(arg)
+	}
+	return arg
+}
+
+func debugValueSummary(label, value string) string {
+	if len(value) <= 120 {
+		return fmt.Sprintf("%s(len=%d): %s", label, len(value), value)
+	}
+
+	head := value[:80]
+	tail := value[len(value)-30:]
+	return fmt.Sprintf("%s(len=%d): %s ... %s", label, len(value), head, tail)
+}
 
 func checkAndroid() bool {
 	cmd := exec.Command("uname", "-o")
@@ -115,6 +153,9 @@ func buildPlayerCmd(url, title, referer, userAgent string, subtitles []string, d
 			if startSecs > 0 {
 				args = append(args, fmt.Sprintf("--start=%s", strconv.FormatFloat(startSecs, 'f', 3, 64)))
 			}
+			if debug && runtime.GOOS == "windows" {
+				args = append(args, "--force-window=immediate", fmt.Sprintf("--log-file=%s", filepath.Join(os.TempDir(), "luffy-mpv.log")))
+			}
 			// Append extra user-configured mpv args.
 			args = append(args, cfg.MpvArgs...)
 			cmd = exec.Command(mpv_executable, args...)
@@ -170,6 +211,9 @@ func buildPlayerCmd(url, title, referer, userAgent string, subtitles []string, d
 			// Resume from saved position (seconds).
 			if startSecs > 0 {
 				args = append(args, fmt.Sprintf("--start=%s", strconv.FormatFloat(startSecs, 'f', 3, 64)))
+			}
+			if debug && runtime.GOOS == "windows" {
+				args = append(args, "--force-window=immediate", fmt.Sprintf("--log-file=%s", filepath.Join(os.TempDir(), "luffy-mpv.log")))
 			}
 			// Append extra user-configured mpv args.
 			args = append(args, cfg.MpvArgs...)
@@ -253,6 +297,11 @@ func Play(url, title, referer, userAgent string, subtitles []string, debug bool,
 	if debug && len(subtitles) > 0 {
 		fmt.Printf("Subtitles found: %d\n", len(subtitles))
 	}
+	if debug {
+		fmt.Printf("Player headers: Referer=%s | User-Agent=%s\n", referer, userAgent)
+		fmt.Println(debugValueSummary("Player URL", url))
+		fmt.Printf("Player command: %s\n", formatCommand(cmd))
+	}
 
 	fmt.Printf("Starting player for %s...\n", title)
 
@@ -326,8 +375,19 @@ func StartPlayer(url, title, referer, userAgent string, subtitles []string, debu
 	}
 
 	// Suppress player output so fzf can own the terminal.
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	if debug {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		fmt.Printf("Player headers: Referer=%s | User-Agent=%s\n", referer, userAgent)
+		fmt.Println(debugValueSummary("Player URL", url))
+		if runtime.GOOS == "windows" {
+			fmt.Printf("MPV log file: %s\n", filepath.Join(os.TempDir(), "luffy-mpv.log"))
+		}
+		fmt.Printf("Player command: %s\n", formatCommand(cmd))
+	} else {
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+	}
 
 	if debug && len(subtitles) > 0 {
 		fmt.Printf("Subtitles found: %d\n", len(subtitles))
@@ -424,6 +484,14 @@ func PlayWithControls(url, title, referer, userAgent string, subtitles []string,
 			cmd.Wait() //nolint:errcheck
 			close(done)
 		}()
+
+		if debug {
+			select {
+			case <-done:
+				return PlayResult{Action: PlaybackQuit}, fmt.Errorf("player exited immediately after launch")
+			case <-time.After(1500 * time.Millisecond):
+			}
+		}
 
 		chosen := SelectActionCtx("Playback:", []string{
 			string(PlaybackNext),

@@ -38,16 +38,28 @@ func DecryptStream(embedLink string, client *http.Client) (string, []string, str
 	if strings.Contains(embedLink, "vidsrc.xyz") ||
 		strings.Contains(embedLink, "vidsrc.me") ||
 		strings.Contains(embedLink, "vidsrc.to") ||
+		strings.Contains(embedLink, "vidsrc.cc") ||
 		strings.Contains(embedLink, "vidsrc.in") ||
 		strings.Contains(embedLink, "vidsrc.pm") ||
 		strings.Contains(embedLink, "vidsrc.net") ||
 		strings.Contains(embedLink, "vidsrc.rip") ||
-		strings.Contains(embedLink, "vidsrc.icu") {
+		strings.Contains(embedLink, "vidsrc.icu") ||
+		strings.Contains(embedLink, "vidsrc-embed.ru") ||
+		strings.Contains(embedLink, "vidsrc-embed.su") ||
+		strings.Contains(embedLink, "vidsrcme.su") ||
+		strings.Contains(embedLink, "vsrc.su") {
 		return DecryptVidsrc(embedLink, client)
 	}
 
 	if strings.Contains(embedLink, "vidlink.pro") {
 		return DecryptVidlink(embedLink, client)
+	}
+
+	if strings.Contains(embedLink, "dsvplay.com") ||
+		strings.Contains(embedLink, "doodstream") ||
+		strings.Contains(embedLink, "streamtape") ||
+		strings.Contains(embedLink, "streamsss") {
+		return DecryptGeneric(embedLink, client)
 	}
 
 	if strings.Contains(embedLink, "embed.su") {
@@ -69,44 +81,60 @@ func DecryptStream(embedLink string, client *http.Client) (string, []string, str
 }
 
 func DecryptVidsrc(urlStr string, client *http.Client) (string, []string, string, error) {
-	req, _ := http.NewRequest("GET", urlStr, nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	resp, err := client.Do(req)
+	const ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+	body, err := fetchHTML(client, urlStr, "", ua)
 	if err != nil {
 		return "", nil, "", err
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
 
-	reCloud := regexp.MustCompile(`src="//cloudnestra\.com/rcp/([^"]+)"`)
-	match := reCloud.FindSubmatch(body)
-	if len(match) < 2 {
-		return "", nil, "", fmt.Errorf("could not find cloudnestra iframe")
+	if strings.Contains(urlStr, "cloudnestra.com/rcp/") {
+		return decryptCloudnestraPage(urlStr, body, client, ua)
 	}
-	hash := string(match[1])
-	cloudUrl := "https://cloudnestra.com/rcp/" + hash
 
-	req, _ = http.NewRequest("GET", cloudUrl, nil)
-	req.Header.Set("Referer", urlStr)
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	resp, err = client.Do(req)
+	if isCloudnestraChallenge(body) {
+		return DecryptVidsrcWithBrowser(urlStr)
+	}
+
+	if nextURL := extractIframeURL(body, urlStr); nextURL != "" && nextURL != urlStr {
+		return DecryptVidsrc(nextURL, client)
+	}
+
+	cloudURL := extractCloudnestraURL(body)
+	if cloudURL == "" {
+		return "", nil, "", fmt.Errorf("could not find supported vidsrc player iframe")
+	}
+
+	body, err = fetchHTML(client, cloudURL, urlStr, ua)
 	if err != nil {
 		return "", nil, "", err
 	}
-	defer resp.Body.Close()
-	body, _ = io.ReadAll(resp.Body)
 
-	rePro := regexp.MustCompile(`src:\s*'/prorcp/([^']+)'`)
-	match = rePro.FindSubmatch(body)
+	return decryptCloudnestraPage(cloudURL, body, client, ua)
+}
+
+func decryptCloudnestraPage(urlStr string, body []byte, client *http.Client, userAgent string) (string, []string, string, error) {
+	cloudURL := urlStr
+	hash := extractCloudnestraHash(urlStr)
+
+	if isCloudnestraChallenge(body) {
+		return "", nil, "", fmt.Errorf("vidsrc/cloudnestra is protected by a Cloudflare Turnstile challenge")
+	}
+
+	rePro := regexp.MustCompile(`src:\s*['"]/prorcp/([^'"]+)['"]`)
+	match := rePro.FindSubmatch(body)
 	if len(match) < 2 {
-		return "", nil, "", fmt.Errorf("could not find prorcp iframe")
+		if nextURL := extractIframeURL(body, cloudURL); nextURL != "" && nextURL != cloudURL {
+			return DecryptVidsrc(nextURL, client)
+		}
+		return "", nil, "", fmt.Errorf("vidsrc/cloudnestra player flow changed or is blocked")
 	}
 	proUrl := "https://cloudnestra.com/prorcp/" + string(match[1])
 
-	req, _ = http.NewRequest("GET", proUrl, nil)
+	req, _ := http.NewRequest("GET", proUrl, nil)
 	req.Header.Set("Referer", "https://cloudnestra.com/")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	resp, err = client.Do(req)
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", nil, "", err
 	}
@@ -120,7 +148,7 @@ func DecryptVidsrc(urlStr string, client *http.Client) (string, []string, string
 	}
 	rawM3u8 := string(match[1])
 
-	finalUrl := rawM3u8
+	finalUrl := sanitizeMediaURL(rawM3u8)
 	placeholders := []string{"{v1}", "{v2}", "{v3}", "{v4}"}
 	for _, p := range placeholders {
 		finalUrl = strings.ReplaceAll(finalUrl, p, "cloudnestra.com")
@@ -129,34 +157,134 @@ func DecryptVidsrc(urlStr string, client *http.Client) (string, []string, string
 	if idx := strings.Index(finalUrl, " or "); idx != -1 {
 		finalUrl = finalUrl[:idx]
 	}
+	finalUrl = sanitizeMediaURL(finalUrl)
 
 	if !strings.HasSuffix(finalUrl, ".m3u8") {
 		return "", nil, "", fmt.Errorf("extracted url is not m3u8: %s", finalUrl)
 	}
 
 	var subs []string
-	parsedUrl, _ := url.Parse(urlStr)
-	subUrl := fmt.Sprintf("%s://%s/ajax/embed/episode/%s/subtitles", parsedUrl.Scheme, parsedUrl.Host, hash)
-	subReq, _ := http.NewRequest("GET", subUrl, nil)
-	subReq.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	subReq.Header.Set("Referer", urlStr)
-	subReq.Header.Set("X-Requested-With", "XMLHttpRequest")
+	if hash != "" {
+		parsedURL, _ := url.Parse(urlStr)
+		subURL := fmt.Sprintf("%s://%s/ajax/embed/episode/%s/subtitles", parsedURL.Scheme, parsedURL.Host, hash)
+		subReq, _ := http.NewRequest("GET", subURL, nil)
+		subReq.Header.Set("User-Agent", userAgent)
+		subReq.Header.Set("Referer", urlStr)
+		subReq.Header.Set("X-Requested-With", "XMLHttpRequest")
 
-	subResp, err := client.Do(subReq)
-	if err == nil && subResp.StatusCode == 200 {
-		var tracks []DecryptedTrack
-		if err := json.NewDecoder(subResp.Body).Decode(&tracks); err == nil {
-			for _, track := range tracks {
-				label := strings.ToLower(track.Label)
-				if strings.Contains(label, "english") || strings.Contains(label, " eng") || label == "eng" {
-					subs = append(subs, track.File)
+		subResp, err := client.Do(subReq)
+		if err == nil && subResp.StatusCode == 200 {
+			var tracks []DecryptedTrack
+			if err := json.NewDecoder(subResp.Body).Decode(&tracks); err == nil {
+				for _, track := range tracks {
+					label := strings.ToLower(track.Label)
+					if strings.Contains(label, "english") || strings.Contains(label, " eng") || label == "eng" {
+						subs = append(subs, track.File)
+					}
 				}
 			}
+			subResp.Body.Close()
 		}
-		subResp.Body.Close()
 	}
 
 	return finalUrl, subs, "https://cloudnestra.com/", nil
+}
+
+func fetchHTML(client *http.Client, urlStr, referer, userAgent string) ([]byte, error) {
+	req, _ := http.NewRequest("GET", urlStr, nil)
+	req.Header.Set("User-Agent", userAgent)
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	return io.ReadAll(resp.Body)
+}
+
+func isCloudnestraChallenge(body []byte) bool {
+	lower := bytes.ToLower(body)
+	return bytes.Contains(lower, []byte("cf-turnstile")) ||
+		bytes.Contains(lower, []byte("/rcp_verify")) ||
+		bytes.Contains(lower, []byte("challenges.cloudflare.com/turnstile"))
+}
+
+func extractIframeURL(body []byte, baseURL string) string {
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?i)<iframe[^>]+src=["']([^"'#?][^"']+)["']`),
+		regexp.MustCompile(`(?i)<iframe[^>]+src=["'](//[^"']+)["']`),
+	}
+
+	for _, re := range patterns {
+		matches := re.FindSubmatch(body)
+		if len(matches) < 2 {
+			continue
+		}
+
+		raw := strings.TrimSpace(string(matches[1]))
+		if raw == "" || raw == "about:blank" {
+			continue
+		}
+
+		if strings.HasPrefix(raw, "//") {
+			return "https:" + raw
+		}
+
+		u, err := url.Parse(raw)
+		if err != nil {
+			continue
+		}
+		if u.IsAbs() {
+			return u.String()
+		}
+
+		base, err := url.Parse(baseURL)
+		if err != nil {
+			continue
+		}
+		return base.ResolveReference(u).String()
+	}
+
+	return ""
+}
+
+func extractCloudnestraURL(body []byte) string {
+	re := regexp.MustCompile(`(?i)(?:src|href)=["'](?:(?:https?:)?//)?(cloudnestra\.com/rcp/[^"'?#]+)`)
+	match := re.FindSubmatch(body)
+	if len(match) < 2 {
+		return ""
+	}
+
+	return "https://" + string(match[1])
+}
+
+func extractCloudnestraURLString(body string) string {
+	re := regexp.MustCompile(`(?i)(?:src|href)=["'](?:(?:https?:)?//)?(cloudnestra\.com/rcp/[^"'?#]+)`)
+	match := re.FindStringSubmatch(body)
+	if len(match) < 2 {
+		return ""
+	}
+
+	return "https://" + match[1]
+}
+
+func extractCloudnestraHash(urlStr string) string {
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return ""
+	}
+
+	path := strings.Trim(parsedURL.Path, "/")
+	parts := strings.Split(path, "/")
+	if len(parts) < 2 || parts[len(parts)-2] != "rcp" {
+		return ""
+	}
+
+	return parts[len(parts)-1]
 }
 
 func DecryptVidlink(urlStr string, client *http.Client) (string, []string, string, error) {
@@ -203,8 +331,10 @@ func DecryptVidlinkStream(urlStr, tmdbID string, client *http.Client) (string, [
 	apiURL := fmt.Sprintf("https://vidlink.pro/api/b/movie/%s", encodedID)
 
 	req, _ := http.NewRequest("GET", apiURL, nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
-	req.Header.Set("Referer", urlStr)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", "https://vidlink.pro/")
+	req.Header.Set("Origin", "https://vidlink.pro")
+	req.Header.Set("Accept", "*/*")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -1004,4 +1134,41 @@ func reverseString(s string) string {
 		runes[i], runes[j] = runes[j], runes[i]
 	}
 	return string(runes)
+}
+
+func DecryptVidsrcWithBrowser(urlStr string) (string, []string, string, error) {
+	browser := NewBrowser()
+	html, _, err := browser.FetchWithBrowser(urlStr)
+	if err != nil {
+		return "", nil, "", fmt.Errorf("browser failed: %w", err)
+	}
+
+	const ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+	if strings.Contains(urlStr, "cloudnestra.com/rcp/") {
+		return decryptCloudnestraPage(urlStr, []byte(html), &http.Client{}, ua)
+	}
+
+	cloudURL := extractCloudnestraURLString(string(html))
+	if cloudURL == "" {
+		return "", nil, "", fmt.Errorf("could not find cloudnestra URL in browser response")
+	}
+
+	html2, _, err := browser.FetchWithBrowser(cloudURL)
+	if err != nil {
+		return "", nil, "", fmt.Errorf("browser failed for cloudnestra page: %w", err)
+	}
+
+	return decryptCloudnestraPage(cloudURL, []byte(html2), &http.Client{}, ua)
+}
+
+func decryptCloudnestraWithBrowser(cloudURL, hash string) (string, []string, string, error) {
+	browser := NewBrowser()
+	html, _, err := browser.FetchWithBrowser(cloudURL)
+	if err != nil {
+		return "", nil, "", fmt.Errorf("browser failed: %w", err)
+	}
+
+	const ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+	return decryptCloudnestraPage(cloudURL, []byte(html), &http.Client{}, ua)
 }
