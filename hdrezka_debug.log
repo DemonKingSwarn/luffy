@@ -1,0 +1,32 @@
+Time: 2026-05-02T22:46:19+05:30
+Translator: 56
+Attempt: 2
+--- REQUEST ---
+POST https://hdrezka.website/ajax/get_cdn_series/
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+Accept: application/json, text/javascript, */*; q=0.01
+Accept-Language: en-US,en;q=0.9
+Origin: https://hdrezka.website
+X-Requested-With: XMLHttpRequest
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+Referer: https://hdrezka.website/series/thriller/89133-gnev-2026.html
+
+id=89133&is_ads=0&is_camrip=0&is_director=0&translator_id=56
+--- RESPONSE ---
+Status: 200 OK
+Content-Type: text/html; charset=utf-8
+Connection: keep-alive
+Strict-Transport-Security: max-age=15768000; includeSubDomains; preload
+X-Hdrezka-Dmn: hdrezka.website
+Server: nginx
+Set-Cookie: PHPSESSID=52o3u7ce7ha2944qhf17q9vsol; path=/,dle_user_id=deleted; expires=Thu, 01-Jan-1970 00:00:01 GMT; Max-Age=0; path=/; domain=.hdrezka.website; HttpOnly,dle_password=deleted; expires=Thu, 01-Jan-1970 00:00:01 GMT; Max-Age=0; path=/; domain=.hdrezka.website; HttpOnly,dle_hash=deleted; expires=Thu, 01-Jan-1970 00:00:01 GMT; Max-Age=0; path=/; domain=.hdrezka.website; HttpOnly
+X-Powered-By: Express
+X-Frame-Options: DENY
+Vary: Accept-Encoding
+Cache-Control: no-store, no-cache, must-revalidate
+Date: Sat, 02 May 2026 17:16:19 GMT
+Expires: Thu, 19 Nov 1981 08:52:00 GMT
+Pragma: no-cache
+X-Content-Type-Options: nosniff
+
+{"success":false,"message":"\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0442\u0438 #2. \u041f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430, \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443 \u0438 \u043f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u043f\u043e\u043f\u044b\u0442\u043a\u0443"}

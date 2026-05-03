@@ -28,6 +28,7 @@ var (
 	bestFlag      bool
 	historyFlag   bool
 	recommendFlag bool
+	browserFlag   bool
 )
 
 // episodeWithNum pairs an episode with its 1-based number within the season.
@@ -50,6 +51,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&bestFlag, "best", "b", false, "Auto-select best quality")
 	rootCmd.Flags().BoolVarP(&historyFlag, "history", "H", false, "Pick from watch history and resume")
 	rootCmd.Flags().BoolVarP(&recommendFlag, "recommend", "r", false, "Show recommendations based on watch history")
+	rootCmd.Flags().BoolVarP(&browserFlag, "watch-in-browser", "w", false, "Open embed URL in browser")
 
 	rootCmd.AddCommand(previewCmd)
 	previewCmd.Flags().StringVar(&backendFlag, "backend", "sixel", "Image backend")
@@ -92,8 +94,12 @@ var rootCmd = &cobra.Command{
 			provider = providers.NewAllAnime(client)
 		} else if strings.EqualFold(providerName, "allanime-dub") {
 			provider = providers.NewAllAnimeDub(client)
+		} else if strings.EqualFold(providerName, "streamsrc") {
+			provider = providers.NewStreamSrc(client)
+		} else if strings.EqualFold(providerName, "vidsrc") {
+			provider = providers.NewVidsrc(client)
 		} else {
-			provider = providers.NewFlixHQ(client)
+			provider = providers.NewVidsrc(client)
 		}
 
 		// Open history DB once; non-fatal if it fails.
@@ -143,12 +149,16 @@ var rootCmd = &cobra.Command{
 				histProvider = providers.NewMovies4u(client)
 			case "youtube":
 				histProvider = providers.NewYouTube(client)
-			case "allanime":
+case "allanime":
 				histProvider = providers.NewAllAnime(client)
 			case "allanime-dub":
 				histProvider = providers.NewAllAnimeDub(client)
+			case "streamsrc":
+				histProvider = providers.NewStreamSrc(client)
+			case "vidsrc":
+				histProvider = providers.NewVidsrc(client)
 			default:
-				histProvider = providers.NewFlixHQ(client)
+				histProvider = providers.NewVidsrc(client)
 			}
 
 			ctx.Title = chosen.Title
@@ -813,7 +823,8 @@ func resolveStreamURL(
 			streamURL = link
 		}
 	} else if strings.EqualFold(providerName, "movies4u") || strings.EqualFold(providerName, "youtube") ||
-		strings.EqualFold(providerName, "allanime") || strings.EqualFold(providerName, "allanime-dub") {
+		strings.EqualFold(providerName, "allanime") || strings.EqualFold(providerName, "allanime-dub") ||
+		strings.EqualFold(providerName, "streamsrc") || strings.EqualFold(providerName, "internetarchive") {
 		streamURL = link
 	} else {
 		if debugMode {
@@ -823,7 +834,14 @@ func resolveStreamURL(
 		streamURL, subtitles, decryptedReferer, err = core.DecryptStream(link, ctx.Client)
 		if err != nil {
 			fmt.Printf("Decryption failed for %s: %v\n", name, err)
-			return
+			if browserFlag || strings.Contains(err.Error(), "Cloudflare") || strings.Contains(err.Error(), "turnstile") {
+				fmt.Println("Opening embed URL in your default browser...")
+				fmt.Println("Watch the video there, then press Ctrl+C to exit.")
+				openURL(link)
+				return streamURL, referer, subtitles, nil
+			} else {
+				return
+			}
 		}
 		if decryptedReferer != "" {
 			referer = decryptedReferer
@@ -942,6 +960,7 @@ func buildProcessStream(
 		case "play":
 			if debugMode {
 				fmt.Printf("Stream URL: %s\n", streamURL)
+				fmt.Printf("Referer: %s\n", referer)
 			}
 			lastPos := getLastPosition(histDB, ctx.Title, season, episode)
 			posSecs, playErr := core.Play(streamURL, name, referer, USER_AGENT, subtitles, debugMode, lastPos, core.HookContext{
@@ -952,10 +971,21 @@ func buildProcessStream(
 				EpName:   epName,
 				Provider: providerName,
 			})
-			if playErr != nil {
-				fmt.Println("Error playing:", playErr)
-				return playErr
+if playErr != nil {
+			fmt.Println("Error playing:", playErr)
+			if bestFlag && browserFlag {
+				fmt.Println("Trying vidsrc in browser...")
+				vidsrcURL, verr := getVidsrcURL(ctx.Title, season > 0, ctx.Client, debugMode)
+				if verr != nil {
+					fmt.Println("Failed to get vidsrc URL:", verr)
+					return playErr
+				}
+				fmt.Printf("Opening: %s\n", vidsrcURL)
+				openURL(vidsrcURL)
+				return nil
 			}
+			return playErr
+		}
 			saveHistory(histDB, ctx, providerName, season, episode, epName, posSecs, debugMode)
 			return nil
 		case "download":
