@@ -345,6 +345,7 @@ You can set the default provider in the config file (`~/.config/luffy/config.yam
 | Movies4u | `movies4u` | Bollywood only |
 | YouTube | `youtube` | Streams/downloads via yt-dlp |
 | Allanime | `allanime` | For anime |
+| Cineby | `cineby` | Uses VidKing embeds for playback |
 | HDRezka | `hdrezka` | Experimental — may not always work |
 
 Example config:
