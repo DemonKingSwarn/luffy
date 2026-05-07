@@ -98,6 +98,8 @@ var rootCmd = &cobra.Command{
 			provider = providers.NewStreamSrc(client)
 		} else if strings.EqualFold(providerName, "vidsrc") {
 			provider = providers.NewVidsrc(client)
+		} else if strings.EqualFold(providerName, "cineby") {
+			provider = providers.NewCineby(client)
 		} else {
 			provider = providers.NewVidsrc(client)
 		}
@@ -149,7 +151,7 @@ var rootCmd = &cobra.Command{
 				histProvider = providers.NewMovies4u(client)
 			case "youtube":
 				histProvider = providers.NewYouTube(client)
-case "allanime":
+			case "allanime":
 				histProvider = providers.NewAllAnime(client)
 			case "allanime-dub":
 				histProvider = providers.NewAllAnimeDub(client)
@@ -157,6 +159,8 @@ case "allanime":
 				histProvider = providers.NewStreamSrc(client)
 			case "vidsrc":
 				histProvider = providers.NewVidsrc(client)
+			case "cineby":
+				histProvider = providers.NewCineby(client)
 			default:
 				histProvider = providers.NewVidsrc(client)
 			}
@@ -796,6 +800,9 @@ func resolveStreamURL(
 	if strings.EqualFold(providerName, "allanime") || strings.EqualFold(providerName, "allanime-dub") {
 		referer = "https://allmanga.to"
 	}
+	if strings.EqualFold(providerName, "cineby") {
+		referer = "https://www.vidking.net/"
+	}
 
 	if strings.EqualFold(providerName, "hdrezka") {
 		streams := strings.Split(link, ",")
@@ -824,7 +831,8 @@ func resolveStreamURL(
 		}
 	} else if strings.EqualFold(providerName, "movies4u") || strings.EqualFold(providerName, "youtube") ||
 		strings.EqualFold(providerName, "allanime") || strings.EqualFold(providerName, "allanime-dub") ||
-		strings.EqualFold(providerName, "streamsrc") || strings.EqualFold(providerName, "internetarchive") {
+		strings.EqualFold(providerName, "streamsrc") || strings.EqualFold(providerName, "internetarchive") ||
+		strings.EqualFold(providerName, "cineby") {
 		streamURL = link
 	} else {
 		if debugMode {
@@ -971,21 +979,21 @@ func buildProcessStream(
 				EpName:   epName,
 				Provider: providerName,
 			})
-if playErr != nil {
-			fmt.Println("Error playing:", playErr)
-			if bestFlag && browserFlag {
-				fmt.Println("Trying vidsrc in browser...")
-				vidsrcURL, verr := getVidsrcURL(ctx.Title, season > 0, ctx.Client, debugMode)
-				if verr != nil {
-					fmt.Println("Failed to get vidsrc URL:", verr)
-					return playErr
+			if playErr != nil {
+				fmt.Println("Error playing:", playErr)
+				if bestFlag && browserFlag {
+					fmt.Println("Trying vidsrc in browser...")
+					vidsrcURL, verr := getVidsrcURL(ctx.Title, season > 0, ctx.Client, debugMode)
+					if verr != nil {
+						fmt.Println("Failed to get vidsrc URL:", verr)
+						return playErr
+					}
+					fmt.Printf("Opening: %s\n", vidsrcURL)
+					openURL(vidsrcURL)
+					return nil
 				}
-				fmt.Printf("Opening: %s\n", vidsrcURL)
-				openURL(vidsrcURL)
-				return nil
+				return playErr
 			}
-			return playErr
-		}
 			saveHistory(histDB, ctx, providerName, season, episode, epName, posSecs, debugMode)
 			return nil
 		case "download":
