@@ -40,6 +40,7 @@ type Config struct {
 	// Example: ["--hwdec=auto", "--volume=80"]
 	MpvArgs []string    `yaml:"mpv_args"`
 	Hooks   HooksConfig `yaml:"hooks"`
+	YtLang string `yaml:"ytlang"`
 }
 
 func LoadConfig() *Config {
@@ -50,6 +51,7 @@ func LoadConfig() *Config {
 		Provider:     "flixhq", // Default provider
 		DlPath:       "",       // Default: use home directory
 		Quality:      "",       // Default: prompt user to select quality
+		YtLang: "",
 	}
 
 	home, err := os.UserHomeDir()
@@ -74,6 +76,7 @@ func LoadConfig() *Config {
 			Provider:     "flixhq",
 			DlPath:       "",
 			Quality:      "",
+			YtLang: "",
 		}
 	}
 
