@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PKG="luffy"
-VERSION="${VERSION:-1.1.6}"
+VERSION="${VERSION:-1.2.0}"
 RELEASE="${RELEASE:-1}"
 
 mkdir -p packaging/fedora

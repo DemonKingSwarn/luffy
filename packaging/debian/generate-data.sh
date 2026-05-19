@@ -3,7 +3,7 @@ set -e
 PKG="luffy"
 EMAIL="swarnadityasingh@pm.me"
 NAME="Swarnaditya Singh"
-VERSION=1.1.6
+VERSION=1.2.0
 FULL_VERSION="${VERSION}-1"
 DATE=$(date -R)
 mkdir -p debian
