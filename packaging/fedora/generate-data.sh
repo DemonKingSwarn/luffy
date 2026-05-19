@@ -18,8 +18,6 @@ License:        GPL-3.0-or-later
 URL:            https://github.com/demonkingswarn/luffy
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz
 
-BuildRequires:  golang
-
 Requires:       chafa
 Requires:       ffmpeg-free
 Requires:       fzf

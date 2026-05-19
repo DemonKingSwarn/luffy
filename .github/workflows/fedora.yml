@@ -27,7 +27,7 @@ jobs:
           go-version: '1.26'
 
       - name: install rpm build tools
-        run: dnf install -y git rpm-build rpmdevtools
+        run: dnf install -y git golang rpm-build rpmdevtools
 
       - name: generate fedora data
         run: bash ./packaging/fedora/generate-data.sh

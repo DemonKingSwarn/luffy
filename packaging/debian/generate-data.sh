@@ -19,7 +19,7 @@ Source: ${PKG}
 Section: utils
 Priority: optional
 Maintainer: ${NAME} <${EMAIL}>
-Build-Depends: debhelper-compat (= 13), golang-go
+Build-Depends: debhelper-compat (= 13), just
 Standards-Version: 4.6.2
 Homepage: https://github.com/demonkingswarn/luffy
 Rules-Requires-Root: no
