@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/debian.yml"
       - "packaging/debian/generate-data.sh"
+      - "workflow-trigger"
   workflow_dispatch:
 
 permissions:
@@ -20,10 +21,12 @@ jobs:
       - name: install lesbian build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential debhelper dh-golang libsixel-bin chafa fzf golang yt-dlp ffmpeg upx-ucl
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/sbin
-          curl -fsSL https://go.dev/dl/go1.25.0.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
-          echo "/usr/local/go/bin" >> $GITHUB_PATH
+          sudo apt-get install -y build-essential debhelper dh-golang just libsixel-bin chafa fzf golang yt-dlp ffmpeg upx-ucl
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
 
       - name: generate lesbian data
         run: bash ./packaging/debian/generate-data.sh
@@ -35,12 +38,12 @@ jobs:
         run: |
           export DEB_BUILD_OPTIONS="nocheck"
           dpkg-buildpackage -us -uc -b
-          cp ../*.deb luffy-1.1.4.deb
+          cp ../*.deb luffy-1.2.0.deb
 
       - name: upload lesbian package
         uses: actions/upload-artifact@v4
         with:
           name: luffy-deb
-          path: luffy-1.1.4.deb
+          path: luffy-1.2.0.deb
 
 

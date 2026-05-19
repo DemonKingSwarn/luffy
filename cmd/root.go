@@ -39,7 +39,22 @@ type episodeWithNum struct {
 	ep  core.Episode
 }
 
-const USER_AGENT = "luffy/1.0.14"
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+func retry[T any](attempts int, sleep time.Duration, fn func() (T, error)) (T, error) {
+	var res T
+	var err error
+	for i := 0; i < attempts; i++ {
+		res, err = fn()
+		if err == nil {
+			return res, nil
+		}
+		if i < attempts-1 {
+			time.Sleep(sleep)
+		}
+	}
+	return res, err
+}
 
 func init() {
 	rootCmd.Flags().IntVarP(&seasonFlag, "season", "s", 0, "Specify season number")
@@ -63,8 +78,8 @@ var rootCmd = &cobra.Command{
 	Short:   "Watch movies and TV shows from the commandline",
 	Version: core.Version,
 	Args:    cobra.ArbitraryArgs,
-
 	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
 		client := core.NewClient()
 		ctx := &core.Context{
 			Client: client,
@@ -80,28 +95,15 @@ var rootCmd = &cobra.Command{
 		}
 
 		var provider core.Provider
-		if strings.EqualFold(providerName, "sflix") {
-			provider = providers.NewSflix(client)
-		} else if strings.EqualFold(providerName, "hdrezka") {
-			provider = providers.NewHDRezka(client)
-		} else if strings.EqualFold(providerName, "braflix") {
-			provider = providers.NewBraflix(client)
-		} else if strings.EqualFold(providerName, "movies4u") {
-			provider = providers.NewMovies4u(client)
-		} else if strings.EqualFold(providerName, "youtube") {
-			provider = providers.NewYouTube(client)
-		} else if strings.EqualFold(providerName, "allanime") {
-			provider = providers.NewAllAnime(client)
-		} else if strings.EqualFold(providerName, "allanime-dub") {
-			provider = providers.NewAllAnimeDub(client)
-		} else if strings.EqualFold(providerName, "streamsrc") {
-			provider = providers.NewStreamSrc(client)
-		} else if strings.EqualFold(providerName, "vidsrc") {
-			provider = providers.NewVidsrc(client)
-		} else if strings.EqualFold(providerName, "cineby") {
+		if strings.EqualFold(providerName, "anime") || strings.EqualFold(providerName, "allanime") {
+			provider = providers.NewAnime(client)
+		} else if strings.EqualFold(providerName, "anime-dub") || strings.EqualFold(providerName, "allanime-dub") {
+			provider = providers.NewAnimeDub(client)
+		} else if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") {
 			provider = providers.NewCineby(client)
 		} else {
-			provider = providers.NewVidsrc(client)
+			providerName = "cineby"
+			provider = providers.NewCineby(client)
 		}
 
 		// Open history DB once; non-fatal if it fails.
@@ -141,28 +143,15 @@ var rootCmd = &cobra.Command{
 			}
 			var histProvider core.Provider
 			switch strings.ToLower(histProviderName) {
-			case "sflix":
-				histProvider = providers.NewSflix(client)
-			case "hdrezka":
-				histProvider = providers.NewHDRezka(client)
-			case "braflix":
-				histProvider = providers.NewBraflix(client)
-			case "movies4u":
-				histProvider = providers.NewMovies4u(client)
-			case "youtube":
-				histProvider = providers.NewYouTube(client)
-			case "allanime":
-				histProvider = providers.NewAllAnime(client)
-			case "allanime-dub":
-				histProvider = providers.NewAllAnimeDub(client)
-			case "streamsrc":
-				histProvider = providers.NewStreamSrc(client)
-			case "vidsrc":
-				histProvider = providers.NewVidsrc(client)
-			case "cineby":
+			case "anime", "allanime":
+				histProvider = providers.NewAnime(client)
+			case "anime-dub", "allanime-dub":
+				histProvider = providers.NewAnimeDub(client)
+			case "cineby", "vidking":
 				histProvider = providers.NewCineby(client)
 			default:
-				histProvider = providers.NewVidsrc(client)
+				histProviderName = "cineby"
+				histProvider = providers.NewCineby(client)
 			}
 
 			ctx.Title = chosen.Title
@@ -277,9 +266,7 @@ var rootCmd = &cobra.Command{
 						return err
 					}
 					saveHistory(histDB, ctx, histProviderName, 0, 0, "", result.PositionSecs, debugFlag)
-					if result.Action == core.PlaybackQuit {
-						return nil
-					}
+					return nil
 				}
 				processStream := buildProcessStream(ctx, cfg, histProviderName, currentAction, histDB, debugFlag, bestFlag)
 				return processStream(link, ctx.Title, 0, 0, "")
@@ -487,9 +474,7 @@ var rootCmd = &cobra.Command{
 						return err
 					}
 					saveHistory(histDB, ctx, providerName, 0, 0, "", result.PositionSecs, debugFlag)
-					if result.Action == core.PlaybackQuit {
-						return nil
-					}
+					return nil
 				}
 				processStream := buildProcessStream(ctx, cfg, providerName, currentAction, histDB, debugFlag, bestFlag)
 				return processStream(link, ctx.Title, 0, 0, "")
@@ -538,9 +523,14 @@ var rootCmd = &cobra.Command{
 			ctx.Query = strings.Join(args, " ")
 		}
 
-		results, err := provider.Search(ctx.Query)
+		results, err := retry(2, time.Second, func() ([]core.SearchResult, error) {
+			return provider.Search(ctx.Query)
+		})
 		if err != nil {
 			return err
+		}
+		if len(results) == 0 {
+			return fmt.Errorf("no results found for \"%s\" on %s", ctx.Query, providerName)
 		}
 
 		var titles []string
@@ -586,7 +576,9 @@ var rootCmd = &cobra.Command{
 
 		fmt.Println("Selected:", ctx.Title)
 
-		mediaID, err := provider.GetMediaID(ctx.URL)
+		mediaID, err := retry(2, 500*time.Millisecond, func() (string, error) {
+			return provider.GetMediaID(ctx.URL)
+		})
 		if err != nil {
 			return err
 		}
@@ -607,6 +599,7 @@ var rootCmd = &cobra.Command{
 		var allEpisodesInSeason []episodeWithNum
 		selectedEpisodeIdx := 0
 
+		var movieServers []core.Episode
 		if ctx.ContentType == core.Series {
 			seasons, err := provider.GetSeasons(mediaID)
 			if err != nil {
@@ -623,6 +616,11 @@ var rootCmd = &cobra.Command{
 				}
 				selectedSeason = seasons[seasonFlag-1]
 				selectedSeasonNum = seasonFlag
+			} else if len(seasons) == 1 {
+				// ani-cli has no redundant season step for AllAnime-style shows.
+				// If a provider exposes a single synthetic season, jump straight to episodes.
+				selectedSeason = seasons[0]
+				selectedSeasonNum = 1
 			} else {
 				var sNames []string
 				for _, s := range seasons {
@@ -673,12 +671,18 @@ var rootCmd = &cobra.Command{
 			}
 
 		} else {
-			servers, err := provider.GetEpisodes(mediaID, false)
+			var err error
+			// For movies, we need the servers/sources directly.
+			// provider.GetServers(mediaID) returns the actual sources for the movie.
+			servers, err := provider.GetServers(mediaID)
 			if err != nil || len(servers) == 0 {
 				return fmt.Errorf("could not find movie info")
 			}
-			for _, s := range servers {
-				episodesToProcess = append(episodesToProcess, episodeWithNum{num: 0, ep: s})
+			movieServers = make([]core.Episode, len(servers))
+			for i, s := range servers {
+				ep := core.Episode{ID: s.ID, Name: s.Name}
+				movieServers[i] = ep
+				episodesToProcess = append(episodesToProcess, episodeWithNum{num: 0, ep: ep})
 			}
 		}
 
@@ -690,31 +694,34 @@ var rootCmd = &cobra.Command{
 		if ctx.ContentType == core.Movie {
 			fmt.Printf("\nProcessing: %s\n", ctx.Title)
 
-			var selectedServer core.Episode // abusing Episode struct for Server info
-			if len(episodesToProcess) > 0 {
-				selectedServer = episodesToProcess[0].ep
+			serverLabels := make([]string, len(movieServers))
+			for i, s := range movieServers {
+				serverLabels[i] = s.Name
 			}
 
+			selectedServerIdx := core.Select("Servers:", serverLabels)
+			selectedServer := episodesToProcess[selectedServerIdx].ep
+
+			// Auto-select Vidcloud if available (common for flixhq/sflix)
 			for _, ewn := range episodesToProcess {
-				if strings.EqualFold(providerName, "hdrezka") {
-					selectedServer = ewn.ep
-					break
-				}
 				if strings.Contains(strings.ToLower(ewn.ep.Name), "vidcloud") {
 					selectedServer = ewn.ep
 					break
 				}
 			}
 
-			link, err := provider.GetLink(selectedServer.ID)
-			if err != nil {
-				return fmt.Errorf("error getting link: %v", err)
-			}
-
 			if currentAction == "play" {
+				link, err := provider.GetLink(selectedServer.ID)
+				if err != nil {
+					return fmt.Errorf("error getting link: %v", err)
+				}
 				streamURL, referer, subtitles, err := resolveStreamURL(link, ctx, cfg, providerName, ctx.Title, debugFlag, bestFlag)
 				if err != nil {
 					return err
+				}
+				if debugFlag {
+					fmt.Printf("Stream URL: %s\n", streamURL)
+					fmt.Printf("Referer: %s\n", referer)
 				}
 				lastPos := getLastPosition(histDB, ctx.Title, 0, 0)
 				result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag, lastPos, core.HookContext{
@@ -726,11 +733,14 @@ var rootCmd = &cobra.Command{
 					return err
 				}
 				saveHistory(histDB, ctx, providerName, 0, 0, "", result.PositionSecs, debugFlag)
-				if result.Action == core.PlaybackQuit {
-					return nil
-				}
+				return nil
 			}
+
 			processStream := buildProcessStream(ctx, cfg, providerName, currentAction, histDB, debugFlag, bestFlag)
+			link, err := provider.GetLink(selectedServer.ID)
+			if err != nil {
+				return fmt.Errorf("error getting link: %v", err)
+			}
 			if err := processStream(link, ctx.Title, 0, 0, ""); err != nil {
 				return err
 			}
@@ -797,10 +807,10 @@ func resolveStreamURL(
 	if strings.EqualFold(providerName, "hdrezka") {
 		referer = ctx.URL
 	}
-	if strings.EqualFold(providerName, "allanime") || strings.EqualFold(providerName, "allanime-dub") {
+	if isAnimeProvider(providerName) {
 		referer = "https://allmanga.to"
 	}
-	if strings.EqualFold(providerName, "cineby") {
+	if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") {
 		referer = "https://www.vidking.net/"
 	}
 
@@ -829,11 +839,38 @@ func resolveStreamURL(
 		if streamURL == "" {
 			streamURL = link
 		}
-	} else if strings.EqualFold(providerName, "movies4u") || strings.EqualFold(providerName, "youtube") ||
-		strings.EqualFold(providerName, "allanime") || strings.EqualFold(providerName, "allanime-dub") ||
-		strings.EqualFold(providerName, "streamsrc") || strings.EqualFold(providerName, "internetarchive") ||
-		strings.EqualFold(providerName, "cineby") {
+	} else if isAnimeProvider(providerName) || strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") {
 		streamURL = link
+		if idx := strings.Index(streamURL, "|referer="); idx != -1 {
+			refererStr := streamURL[idx+9:]
+			streamURL = streamURL[:idx]
+			if next := strings.Index(refererStr, "|"); next != -1 {
+				streamURL += refererStr[next:]
+				refererStr = refererStr[:next]
+			}
+			if decoded, decodeErr := url.QueryUnescape(refererStr); decodeErr == nil {
+				refererStr = decoded
+			}
+			if refererStr != "" {
+				referer = refererStr
+			}
+		}
+		if idx := strings.Index(streamURL, "|subs="); idx != -1 {
+			subsStr := streamURL[idx+6:]
+			streamURL = streamURL[:idx]
+			if decoded, decodeErr := url.QueryUnescape(subsStr); decodeErr == nil {
+				subsStr = decoded
+			}
+			sep := ","
+			if strings.Contains(subsStr, "\n") {
+				sep = "\n"
+			}
+			for _, sub := range strings.Split(subsStr, sep) {
+				if sub = strings.TrimSpace(sub); sub != "" {
+					subtitles = append(subtitles, sub)
+				}
+			}
+		}
 	} else {
 		if debugMode {
 			fmt.Println("Decrypting stream...")
@@ -864,7 +901,8 @@ func resolveStreamURL(
 		}
 	}
 
-	if strings.Contains(streamURL, ".m3u8") {
+	if strings.Contains(strings.ToLower(streamURL), ".m3u8") ||
+		(strings.EqualFold(providerName, "cinebolt") && !best && !strings.EqualFold(cfg.Quality, "best")) {
 		if debugMode {
 			fmt.Println("Fetching available qualities...")
 			fmt.Printf("Master m3u8 URL: %s\n", streamURL)
@@ -875,7 +913,20 @@ func resolveStreamURL(
 			if debugMode {
 				fmt.Printf("Failed to parse m3u8: %v\n", qErr)
 			}
-		} else if len(qualities) > 0 {
+		} else {
+			hlsSubtitles, subErr := core.GetSubtitles(streamURL, ctx.Client, referer)
+			if subErr != nil {
+				if debugMode {
+					fmt.Printf("Failed to parse m3u8 subtitles: %v\n", subErr)
+				}
+			} else if len(hlsSubtitles) > 0 {
+				subtitles = appendUniqueStrings(subtitles, hlsSubtitles...)
+				if debugMode {
+					fmt.Printf("Found %d HLS subtitle tracks\n", len(hlsSubtitles))
+				}
+			}
+		}
+		if qErr == nil && len(qualities) > 0 {
 			if debugMode {
 				fmt.Printf("Found %d quality variants\n", len(qualities))
 			}
@@ -893,6 +944,26 @@ func resolveStreamURL(
 		}
 	}
 	return
+}
+
+func isAnimeProvider(providerName string) bool {
+	return strings.EqualFold(providerName, "anime") || strings.EqualFold(providerName, "anime-dub") ||
+		strings.EqualFold(providerName, "allanime") || strings.EqualFold(providerName, "allanime-dub")
+}
+
+func appendUniqueStrings(values []string, candidates ...string) []string {
+	seen := make(map[string]bool, len(values)+len(candidates))
+	for _, value := range values {
+		seen[value] = true
+	}
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate != "" && !seen[candidate] {
+			seen[candidate] = true
+			values = append(values, candidate)
+		}
+	}
+	return values
 }
 
 // getLinkForEpisode resolves the raw provider link for a given episodeWithNum.
@@ -982,10 +1053,10 @@ func buildProcessStream(
 			if playErr != nil {
 				fmt.Println("Error playing:", playErr)
 				if bestFlag && browserFlag {
-					fmt.Println("Trying vidsrc in browser...")
-					vidsrcURL, verr := getVidsrcURL(ctx.Title, season > 0, ctx.Client, debugMode)
+					fmt.Println("Trying Cineby in browser...")
+					vidsrcURL, verr := getCinebyURL(ctx.Title, season > 0, ctx.Client, debugMode)
 					if verr != nil {
-						fmt.Println("Failed to get vidsrc URL:", verr)
+						fmt.Println("Failed to get Cineby URL:", verr)
 						return playErr
 					}
 					fmt.Printf("Opening: %s\n", vidsrcURL)

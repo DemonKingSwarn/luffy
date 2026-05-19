@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PKG="luffy"
-VERSION="${VERSION:-1.1.6}"
+VERSION="${VERSION:-1.2.0}"
 RELEASE="${RELEASE:-1}"
 
 mkdir -p packaging/fedora
@@ -17,8 +17,6 @@ Summary:        Watch movies and series from the terminal
 License:        GPL-3.0-or-later
 URL:            https://github.com/demonkingswarn/luffy
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz
-
-BuildRequires:  golang
 
 Requires:       chafa
 Requires:       ffmpeg-free

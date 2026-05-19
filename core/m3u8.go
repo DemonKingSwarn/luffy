@@ -120,6 +120,119 @@ func GetQualities(m3u8URL string, client *http.Client, referer string) ([]Qualit
 	return nil, sanitizeMediaURL(m3u8URL), nil
 }
 
+func GetSubtitles(m3u8URL string, client *http.Client, referer string) ([]string, error) {
+	req, err := http.NewRequest("GET", m3u8URL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("failed to fetch m3u8 subtitles: %d", resp.StatusCode)
+	}
+
+	baseURL, err := url.Parse(m3u8URL)
+	if err != nil {
+		return nil, err
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	var all []string
+	var preferred []string
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "#EXT-X-MEDIA:") {
+			continue
+		}
+
+		attrs := parseM3U8Attributes(strings.TrimPrefix(line, "#EXT-X-MEDIA:"))
+		if !strings.EqualFold(attrs["TYPE"], "SUBTITLES") || attrs["URI"] == "" {
+			continue
+		}
+
+		resolvedURL := attrs["URI"]
+		u, err := url.Parse(attrs["URI"])
+		if err == nil {
+			resolvedURL = baseURL.ResolveReference(u).String()
+		}
+
+		all = appendUnique(all, resolvedURL)
+		if isEnglishSubtitle(attrs["LANGUAGE"], attrs["NAME"]) {
+			preferred = appendUnique(preferred, resolvedURL)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(preferred) > 0 {
+		return preferred, nil
+	}
+	return all, nil
+}
+
+func parseM3U8Attributes(text string) map[string]string {
+	attrs := make(map[string]string)
+	for _, part := range splitM3U8AttributeList(text) {
+		key, value, ok := strings.Cut(part, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.Trim(strings.TrimSpace(value), `"`)
+		if key != "" {
+			attrs[key] = value
+		}
+	}
+	return attrs
+}
+
+func splitM3U8AttributeList(text string) []string {
+	var parts []string
+	start := 0
+	inQuotes := false
+	for i, r := range text {
+		switch r {
+		case '"':
+			inQuotes = !inQuotes
+		case ',':
+			if !inQuotes {
+				parts = append(parts, text[start:i])
+				start = i + 1
+			}
+		}
+	}
+	parts = append(parts, text[start:])
+	return parts
+}
+
+func isEnglishSubtitle(language, name string) bool {
+	language = strings.ToLower(strings.TrimSpace(language))
+	name = strings.ToLower(strings.TrimSpace(name))
+	return language == "en" || strings.HasPrefix(language, "en-") || language == "eng" ||
+		strings.Contains(name, "english") || name == "eng"
+}
+
+func appendUnique(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
 func formatBandwidth(bandwidth int) string {
 	if bandwidth >= 1000000 {
 		return fmt.Sprintf("%.1f Mbps", float64(bandwidth)/1000000)

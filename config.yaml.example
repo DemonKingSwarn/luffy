@@ -12,9 +12,9 @@ player: mpv
 # Options: sixel, kitty.
 image_backend: sixel
 
-# Provider for anime sources (default: flixhq)
-# Options: flixhq, brocoflix, etc.
-provider: flixhq
+# Provider for media sources (default: cineby)
+# Options: cineby, anime, anime-dub
+provider: cineby
 
 # Download path for saved videos (default: user's home directory)
 # Leave empty to use home directory

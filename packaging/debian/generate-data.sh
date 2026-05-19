@@ -3,7 +3,7 @@ set -e
 PKG="luffy"
 EMAIL="swarnadityasingh@pm.me"
 NAME="Swarnaditya Singh"
-VERSION=1.1.6
+VERSION=1.2.0
 FULL_VERSION="${VERSION}-1"
 DATE=$(date -R)
 mkdir -p debian
@@ -19,7 +19,7 @@ Source: ${PKG}
 Section: utils
 Priority: optional
 Maintainer: ${NAME} <${EMAIL}>
-Build-Depends: debhelper-compat (= 13), golang-go
+Build-Depends: debhelper-compat (= 13), just
 Standards-Version: 4.6.2
 Homepage: https://github.com/demonkingswarn/luffy
 Rules-Requires-Root: no

@@ -219,12 +219,15 @@ func (c *Cineby) GetServers(episodeID string) ([]core.Server, error) {
 }
 
 func (c *Cineby) GetLink(serverID string) (string, error) {
-	return resolveVidKingEmbed(serverID)
+	return resolveVidKingEmbed(serverID, c.Client)
 }
 
-func resolveVidKingEmbed(embedURL string) (string, error) {
+func resolveVidKingEmbed(embedURL string, client *http.Client) (string, error) {
 	if _, err := exec.LookPath("agent-browser"); err != nil {
 		return "", fmt.Errorf("agent-browser is required to resolve VidKing embeds: %w", err)
+	}
+	if client == nil {
+		client = http.DefaultClient
 	}
 
 	if !strings.Contains(embedURL, "autoPlay=") {
@@ -246,27 +249,134 @@ func resolveVidKingEmbed(embedURL string) (string, error) {
 		return "", fmt.Errorf("failed waiting for VidKing playback: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 
-	script := `JSON.stringify(performance.getEntriesByType('resource').map(r => r.name).filter(n => /\.m3u8(\?|$)/i.test(n)))`
+	script := `JSON.stringify({
+		m3u8s: performance.getEntriesByType('resource').map(r => r.name).filter(n => /\.m3u8(\?|$)/i.test(n)),
+		subtitles: [
+			...performance.getEntriesByType('resource').map(r => r.name).filter(n => /(\.(vtt|srt|ass)(\?|$)|\/(subtitles?|captions?)([/?#]|$))/i.test(n)),
+			...Array.from(document.querySelectorAll('track[src]')).map(t => t.src)
+		],
+		subtitleAPIs: performance.getEntriesByType('resource').map(r => r.name).filter(n => /^https?:\/\/sub\.wyzie\.io\/search/i.test(n))
+	})`
 	output, err := exec.CommandContext(ctx, "agent-browser", append(sessionArgs, "eval", script)...).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to inspect VidKing resources: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 
-	m3u8s := extractM3U8URLs(string(output))
+	m3u8s, subtitles, subtitleAPIs := extractVidKingURLs(string(output))
 	if len(m3u8s) == 0 {
 		return "", fmt.Errorf("no playable m3u8 found in VidKing embed")
 	}
+	for _, apiURL := range subtitleAPIs {
+		apiSubtitles, err := fetchWyzieSubtitles(apiURL, client)
+		if err != nil {
+			continue
+		}
+		subtitles = append(subtitles, apiSubtitles...)
+	}
+	subtitles = dedupeURLs(subtitles)
+	if len(subtitles) > 0 {
+		return m3u8s[0] + "|subs=" + url.QueryEscape(strings.Join(subtitles, "\n")), nil
+	}
 	return m3u8s[0], nil
+}
+
+func extractVidKingURLs(text string) ([]string, []string, []string) {
+	var payload struct {
+		M3U8s        []string `json:"m3u8s"`
+		Subtitles    []string `json:"subtitles"`
+		SubtitleAPIs []string `json:"subtitleAPIs"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(text)), &payload); err == nil {
+		return dedupeURLs(payload.M3U8s), dedupeURLs(payload.Subtitles), dedupeURLs(payload.SubtitleAPIs)
+	}
+	return extractM3U8URLs(text), extractSubtitleURLs(text), extractSubtitleAPIURLs(text)
 }
 
 func extractM3U8URLs(text string) []string {
 	re := regexp.MustCompile(`https?://[^"\\\s]+\.m3u8[^"\\\s]*`)
 	matches := re.FindAllString(text, -1)
+	return dedupeURLs(matches)
+}
+
+func extractSubtitleURLs(text string) []string {
+	re := regexp.MustCompile(`https?://[^"\\\s]+(?:\.(?:vtt|srt|ass)(?:\?[^"\\\s]*)?|/(?:subtitles?|captions?)(?:[/?#][^"\\\s]*)?)`)
+	matches := re.FindAllString(text, -1)
+	return dedupeURLs(matches)
+}
+
+func extractSubtitleAPIURLs(text string) []string {
+	re := regexp.MustCompile(`https?://sub\.wyzie\.io/search[^"\\\s]+`)
+	matches := re.FindAllString(text, -1)
+	return dedupeURLs(matches)
+}
+
+func fetchWyzieSubtitles(apiURL string, client *http.Client) ([]string, error) {
+	req, err := core.NewRequest("GET", apiURL)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Referer", VIDKING_BASE_URL+"/")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("failed to fetch subtitles: %d", resp.StatusCode)
+	}
+
+	var tracks []struct {
+		URL               string `json:"url"`
+		Language          string `json:"language"`
+		Display           string `json:"display"`
+		IsHearingImpaired bool   `json:"isHearingImpaired"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tracks); err != nil {
+		return nil, err
+	}
+
+	var english []string
+	var englishHI []string
+	var fallback []string
+	for _, track := range tracks {
+		if track.URL == "" {
+			continue
+		}
+		if isEnglishSubtitle(track.Language, track.Display) {
+			if track.IsHearingImpaired {
+				englishHI = append(englishHI, track.URL)
+			} else {
+				english = append(english, track.URL)
+			}
+			continue
+		}
+		fallback = append(fallback, track.URL)
+	}
+	if len(english) > 0 {
+		return dedupeURLs(english), nil
+	}
+	if len(englishHI) > 0 {
+		return dedupeURLs(englishHI), nil
+	}
+	return dedupeURLs(fallback), nil
+}
+
+func isEnglishSubtitle(language, display string) bool {
+	language = strings.ToLower(strings.TrimSpace(language))
+	display = strings.ToLower(strings.TrimSpace(display))
+	return language == "en" || language == "eng" || strings.HasPrefix(language, "en-") ||
+		strings.Contains(display, "english")
+}
+
+func dedupeURLs(matches []string) []string {
 	seen := make(map[string]bool, len(matches))
 	urls := make([]string, 0, len(matches))
 	for _, match := range matches {
 		match = strings.ReplaceAll(match, `\/`, `/`)
 		match = strings.ReplaceAll(match, `\u0026`, `&`)
+		match = strings.TrimSpace(match)
 		if !seen[match] {
 			seen[match] = true
 			urls = append(urls, match)
