@@ -20,12 +20,17 @@ provider: cineby
 # Leave empty to use home directory
 dl_path: "/home/swarn/dl"
 
-# The language preference given to youtube
-# Leave empty to let youtube decide
-yt_language: "en"
 # Quality selection (default: empty = show fzf prompt to pick quality)
 # Set to "best" to automatically select the highest available quality.
 # quality: best
+
+# The language preference given to youtube
+# Should be a 2 letter language identifier. Examples below
+# "en" English
+# "de" German (Deutsch)
+# "ar" Arabic
+# Leave empty to let youtube decide
+# yt_language: "en"
 
 # Extra arguments appended to every mpv invocation.
 # Useful for hardware decoding, volume presets, window settings, etc.
