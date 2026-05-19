@@ -40,7 +40,7 @@ type Config struct {
 	// Example: ["--hwdec=auto", "--volume=80"]
 	MpvArgs []string    `yaml:"mpv_args"`
 	Hooks   HooksConfig `yaml:"hooks"`
-	YtLang string `yaml:"yt_lang"`
+	YtLang string `yaml:"yt_language"`
 }
 
 func LoadConfig() *Config {
