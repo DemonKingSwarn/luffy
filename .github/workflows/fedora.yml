@@ -21,8 +21,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
       - name: install rpm build tools
-        run: dnf install -y git golang rpm-build rpmdevtools
+        run: dnf install -y git rpm-build rpmdevtools
 
       - name: generate fedora data
         run: bash ./packaging/fedora/generate-data.sh
@@ -35,10 +40,10 @@ jobs:
 
       - name: collect artifacts
         run: |
-          cp -v ~/rpmbuild/RPMS/*/*.rpm luffy-1.1.4.rpm
+          cp -v ~/rpmbuild/RPMS/*/*.rpm luffy-1.2.0.rpm
 
       - name: upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: luffy-rpm
-          path: luffy-1.1.4.rpm
+          path: luffy-1.2.0.rpm
