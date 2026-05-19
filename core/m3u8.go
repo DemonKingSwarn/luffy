@@ -121,6 +121,8 @@ func GetQualities(m3u8URL string, client *http.Client, referer string) ([]Qualit
 }
 
 func GetSubtitles(m3u8URL string, client *http.Client, referer string) ([]string, error) {
+	m3u8URL = sanitizeMediaURL(m3u8URL)
+
 	req, err := http.NewRequest("GET", m3u8URL, nil)
 	if err != nil {
 		return nil, err
@@ -161,8 +163,8 @@ func GetSubtitles(m3u8URL string, client *http.Client, referer string) ([]string
 			continue
 		}
 
-		resolvedURL := attrs["URI"]
-		u, err := url.Parse(attrs["URI"])
+		resolvedURL := sanitizeMediaURL(attrs["URI"])
+		u, err := url.Parse(resolvedURL)
 		if err == nil {
 			resolvedURL = baseURL.ResolveReference(u).String()
 		}
