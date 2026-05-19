@@ -77,6 +77,10 @@ func DecryptStream(embedLink string, client *http.Client) (string, []string, str
 		return DecryptMegacloud(embedLink, client)
 	}
 
+	if strings.Contains(embedLink, "popembed.net") {
+		return embedLink, nil, "https://cinebolt.net/", nil
+	}
+
 	return DecryptGeneric(embedLink, client)
 }
 
@@ -171,7 +175,6 @@ func decryptCloudnestraPage(urlStr string, body []byte, client *http.Client, use
 		subReq.Header.Set("User-Agent", userAgent)
 		subReq.Header.Set("Referer", urlStr)
 		subReq.Header.Set("X-Requested-With", "XMLHttpRequest")
-
 		subResp, err := client.Do(subReq)
 		if err == nil && subResp.StatusCode == 200 {
 			var tracks []DecryptedTrack
@@ -308,10 +311,7 @@ func DecryptVidlink(urlStr string, client *http.Client) (string, []string, strin
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&tracks); err == nil {
 			for _, t := range tracks {
-				label := strings.ToLower(t.Label)
-				if strings.Contains(label, "english") || strings.Contains(label, " eng") || label == "eng" {
-					subs = append(subs, t.URL)
-				}
+				subs = append(subs, t.URL)
 			}
 		}
 		resp.Body.Close()
@@ -439,6 +439,11 @@ func DecryptMegacloud(urlStr string, client *http.Client) (string, []string, str
 
 	clientKey := extractMegacloudClientKey(bodyStr)
 	if clientKey == "" {
+		// Fallback: try extracting directly from the page
+		stream, subs, ref, err := DecryptMegacloudFromPage(urlStr, client)
+		if err == nil && stream != "" {
+			return stream, subs, ref, nil
+		}
 		clientKey = extractMegacloudClientKeyFromPage(bodyStr)
 	}
 	if clientKey == "" {
@@ -531,10 +536,7 @@ func DecryptMegacloud(urlStr string, client *http.Client) (string, []string, str
 	var subs []string
 	for _, track := range data.Tracks {
 		if track.Kind == "captions" || track.Kind == "subtitles" {
-			label := strings.ToLower(track.Label)
-			if strings.Contains(label, "english") || strings.Contains(label, "eng") {
-				subs = append(subs, track.File)
-			}
+			subs = append(subs, track.File)
 		}
 	}
 
@@ -553,11 +555,19 @@ func DecryptMegacloud(urlStr string, client *http.Client) (string, []string, str
 
 func extractMegacloudClientKey(html string) string {
 	patterns := []string{
+		`<meta\s+name="_gg_fb"\s+content="([^"]+)"`,
 		`<meta[^>]+name=["']_gg_fb["'][^>]+content=["']([^"']+)["']`,
 		`window\._xy_ws\s*=\s*["']([^"']+)["']`,
 		`window\._xy_ws\s*=\s*([^;\n<]+)`,
+		`window\._id\s*=\s*["']([^"']+)["']`,
+		`window\._key\s*=\s*["']([^"']+)["']`,
+		`window\.[a-zA-Z0-9$]+\._\s*=\s*["']([^"']+)["']`,
+		`window\._[a-z0-9]{2}\s*=\s*["']([^"']+)["']`,
 		`<!--\s*_is_th:([0-9a-zA-Z]+)\s+-->`,
+		`<div[^>]+data-dpi="([^"]+)"`,
 		`<div[^>]+data-dpi=["']([^"']+)["']`,
+		`<div[^>]+data-id="([^"]+)"`,
+		`<div[^>]+data-value="([^"]+)"`,
 	}
 
 	for _, pattern := range patterns {
@@ -567,8 +577,7 @@ func extractMegacloudClientKey(html string) string {
 			return matches[1]
 		}
 	}
-
-	lkDbRe := regexp.MustCompile(`window\._lk_db\s*=\s*\{(?s:[^}]*)x:\s*["']([^"']+)["'](?s:[^}]*)y:\s*["']([^"']+)["'](?s:[^}]*)z:\s*["']([^"']+)["'](?s:[^}]*)\}`)
+	lkDbRe := regexp.MustCompile(`window\._lk_db\s*=\s*\{(?s:[^}]*)[a-zA-Z]:\s*["']([^"']+)["'](?s:[^}]*)[a-zA-Z]:\s*["']([^"']+)["'](?s:[^}]*)[a-zA-Z]:\s*["']([^"']+)["'](?s:[^}]*)\}`)
 	matches := lkDbRe.FindStringSubmatch(html)
 	if len(matches) > 3 {
 		return matches[1] + matches[2] + matches[3]
@@ -801,16 +810,32 @@ func DecryptMegacloudFromPage(urlStr string, client *http.Client) (string, []str
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 
+	var subs []string
+	tracksRe := regexp.MustCompile(`tracks:\s*(\[[^\]]+\])`)
+	if match := tracksRe.FindSubmatch(body); len(match) >= 2 {
+		var tracks []struct {
+			File string `json:"file"`
+			Kind string `json:"kind"`
+		}
+		if err := json.Unmarshal(match[1], &tracks); err == nil {
+			for _, t := range tracks {
+				if t.Kind == "captions" || t.Kind == "subtitles" {
+					subs = append(subs, t.File)
+				}
+			}
+		}
+	}
+
 	sourceRe := regexp.MustCompile(`source:\s*['"]([^'"]+\.m3u8[^'"]*)['"]`)
 	match := sourceRe.FindSubmatch(body)
 	if len(match) >= 2 {
-		return string(match[1]), nil, referer, nil
+		return string(match[1]), subs, referer, nil
 	}
 
 	fileRe := regexp.MustCompile(`file:\s*['"]([^'"]+\.m3u8[^'"]*)['"]`)
 	match = fileRe.FindSubmatch(body)
 	if len(match) >= 2 {
-		return string(match[1]), nil, referer, nil
+		return string(match[1]), subs, referer, nil
 	}
 
 	srcRe := regexp.MustCompile(`['"]([^'"]*\.m3u8[^'"]*)['"]`)

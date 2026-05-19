@@ -481,7 +481,10 @@ func PlayWithControls(url, title, referer, userAgent string, subtitles []string,
 		// Signal when the player exits on its own.
 		done := make(chan struct{})
 		go func() {
-			cmd.Wait() //nolint:errcheck
+			err := cmd.Wait()
+			if err != nil && debug {
+				fmt.Printf("\nPlayer exited with error: %v\n", err)
+			}
 			close(done)
 		}()
 

@@ -10,26 +10,26 @@ import (
 	"github.com/demonkingswarn/luffy/core/providers"
 )
 
-func getVidsrcURL(title string, isSeries bool, client *http.Client, debug bool) (string, error) {
-	vidsrc := providers.NewVidsrc(client)
-	results, err := vidsrc.Search(title)
+func getCinebyURL(title string, isSeries bool, client *http.Client, debug bool) (string, error) {
+	cineby := providers.NewCineby(client)
+	results, err := cineby.Search(title)
 	if err != nil {
-		return "", fmt.Errorf("vidsrc search failed: %w", err)
+		return "", fmt.Errorf("cineby search failed: %w", err)
 	}
 	if len(results) == 0 {
-		return "", fmt.Errorf("no results from vidsrc for: %s", title)
+		return "", fmt.Errorf("no results from cineby for: %s", title)
 	}
 	firstURL := results[0].URL
 	if debug {
-		fmt.Printf("Vidsrc found: %s -> %s\n", results[0].Title, firstURL)
+		fmt.Printf("Cineby found: %s -> %s\n", results[0].Title, firstURL)
 	}
-	mediaID, err := vidsrc.GetMediaID(firstURL)
+	mediaID, err := cineby.GetMediaID(firstURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to get vidsrc media ID: %w", err)
+		return "", fmt.Errorf("failed to get cineby media ID: %w", err)
 	}
-	link, err := vidsrc.GetLink(mediaID)
+	link, err := cineby.GetLink(mediaID)
 	if err != nil {
-		return "", fmt.Errorf("failed to get vidsrc link: %w", err)
+		return "", fmt.Errorf("failed to get cineby link: %w", err)
 	}
 	return link, nil
 }
