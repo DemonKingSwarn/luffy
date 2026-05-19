@@ -6,6 +6,7 @@ on:
       - ".github/workflows/fedora.yml"
       - "packaging/fedora/generate-data.sh"
       - "packaging/fedora/luffy.spec"
+      - "workflow-trigger"
   workflow_dispatch:
 
 permissions:
