@@ -101,6 +101,8 @@ var rootCmd = &cobra.Command{
 			provider = providers.NewAnimeDub(client)
 		} else if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") {
 			provider = providers.NewCineby(client)
+		} else if strings.EqualFold(providerName, "youtube") {
+			provider = providers.NewYouTube(client)
 		} else {
 			providerName = "cineby"
 			provider = providers.NewCineby(client)
@@ -145,6 +147,8 @@ var rootCmd = &cobra.Command{
 			switch strings.ToLower(histProviderName) {
 			case "anime", "allanime":
 				histProvider = providers.NewAnime(client)
+			case "youtube":
+				histProvider = providers.NewYouTube(client)
 			case "anime-dub", "allanime-dub":
 				histProvider = providers.NewAnimeDub(client)
 			case "cineby", "vidking":
@@ -839,7 +843,7 @@ func resolveStreamURL(
 		if streamURL == "" {
 			streamURL = link
 		}
-	} else if isAnimeProvider(providerName) || strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") {
+	} else if isAnimeProvider(providerName) || strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "youtube") {
 		streamURL = link
 		if idx := strings.Index(streamURL, "|referer="); idx != -1 {
 			refererStr := streamURL[idx+9:]

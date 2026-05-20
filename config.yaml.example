@@ -24,6 +24,14 @@ dl_path: "/home/swarn/dl"
 # Set to "best" to automatically select the highest available quality.
 # quality: best
 
+# The language preference given to youtube
+# Should be a 2 letter language identifier. Examples below
+# "en" English
+# "de" German (Deutsch)
+# "ar" Arabic
+# Leave empty to let youtube decide
+# yt_language: "en"
+
 # Extra arguments appended to every mpv invocation.
 # Useful for hardware decoding, volume presets, window settings, etc.
 # mpv_args:
