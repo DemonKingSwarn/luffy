@@ -337,18 +337,63 @@ Every hook receives `LUFFY_TITLE`, `LUFFY_URL`, `LUFFY_SEASON`, `LUFFY_EPISODE`,
 
 You can set the default provider in the config file (`~/.config/luffy/config.yaml`) or override it per-run with `--provider`.
 
-| Provider | `provider:` value | Notes |
-|----------|-------------------|-------|
-| FlixHQ | `flixhq` | Default |
-| Sflix | `sflix` | |
-| Braflix | `braflix` | |
-| Movies4u | `movies4u` | Bollywood only |
-| YouTube | `youtube` | Streams/downloads via yt-dlp |
-| Allanime | `allanime` | For anime |
-| Cineby | `cineby` | Uses VidKing embeds for playback |
-| HDRezka | `hdrezka` | Experimental — may not always work |
+| Provider | `provider:` value | Content | Notes |
+|----------|-------------------|---------|-------|
+| Cineby | `cineby` | Movies & TV | Default. Uses VidKing embeds. Requires `agent-browser`. |
+| Anime (sub) | `anime` or `allanime` | Anime | Subtitled. Uses AllAnime. |
+| Anime (dub) | `anime-dub` or `allanime-dub` | Anime | Dubbed. Uses AllAnime. |
 
 Example config:
 ```yaml
-provider: sflix
+provider: cineby
 ```
+
+> [!NOTE]
+> The cineby provider requires [`agent-browser`](https://github.com/steel-dev/agent-browser) to resolve streams. Make sure it is installed and available on your `PATH`.
+
+---
+
+## Debugging
+
+Run any command with `--debug` (`-d`) to print detailed information:
+
+```bash
+luffy "breaking bad" -s 1 -e 1 --debug
+```
+
+Debug output includes:
+- The embed URL being resolved
+- The master m3u8 URL
+- The referer header used
+- Number of subtitle tracks found
+- The exact mpv command being run
+
+If playback fails, the debug output is almost always enough to diagnose the problem.
+
+---
+
+## Before Opening an Issue
+
+Please try these steps first:
+
+1. **Update luffy** — most issues are already fixed in the latest version.
+   ```bash
+   go install github.com/demonkingswarn/luffy@latest
+   ```
+
+2. **Run with `--debug`** and read the output — it usually tells you exactly what failed.
+
+3. **Check if `agent-browser` is installed** (required for the cineby provider):
+   ```bash
+   agent-browser --version
+   ```
+
+4. **Try a different title** — the content may be unavailable on the provider.
+
+5. **Check the [Discord](https://discord.gg/JF85vTkDyC)** — someone may have already reported the same issue.
+
+If none of the above helps, open an issue and include:
+- The exact command you ran
+- The full `--debug` output
+- Your OS and luffy version (`luffy --version` if available, or `git log -1 --oneline`)
+- Whether the issue is with a movie or TV show, and the title

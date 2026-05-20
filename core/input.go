@@ -18,6 +18,9 @@ func Prompt(label string) string {
 }
 
 func Select(label string, items []string) int {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return 0
+	}
 	components := make([]interface{}, len(items))
 	for i := range items {
 		components[i] = i
@@ -74,6 +77,9 @@ func SelectAction(label string, actions []string) string {
 // If done is closed before the user makes a selection, fzf is killed and ""
 // is returned — this lets the caller detect that the player exited on its own.
 func SelectActionCtx(label string, actions []string, done <-chan struct{}) string {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return ""
+	}
 	components := make([]interface{}, len(actions))
 	for i := range actions {
 		components[i] = i
@@ -139,6 +145,9 @@ func SelectActionCtx(label string, actions []string, done <-chan struct{}) strin
 }
 
 func SelectWithPreview(label string, items []string, previewCmd string) int {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return 0
+	}
 	components := make([]interface{}, len(items))
 	for i := range items {
 		components[i] = i

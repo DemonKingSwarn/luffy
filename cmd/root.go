@@ -711,6 +711,7 @@ var rootCmd = &cobra.Command{
 			}
 
 			if currentAction == "play" {
+				fmt.Printf("\nLoading: %s\n", ctx.Title)
 				link, err := provider.GetLink(selectedServer.ID)
 				if err != nil {
 					return fmt.Errorf("error getting link: %v", err)
@@ -737,6 +738,7 @@ var rootCmd = &cobra.Command{
 			}
 
 			processStream := buildProcessStream(ctx, cfg, providerName, currentAction, histDB, debugFlag, bestFlag)
+			fmt.Printf("\nLoading: %s\n", ctx.Title)
 			link, err := provider.GetLink(selectedServer.ID)
 			if err != nil {
 				return fmt.Errorf("error getting link: %v", err)
@@ -943,6 +945,7 @@ func resolveStreamURL(
 			streamURL = directURL
 		}
 	}
+
 	return
 }
 

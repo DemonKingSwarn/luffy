@@ -267,6 +267,14 @@ func readPositionViaIPC(client *gopv.Client) float64 {
 func Play(url, title, referer, userAgent string, subtitles []string, debug bool, startSecs float64, hctx HookContext) (float64, error) {
 	cfg := LoadConfig()
 
+	defer func() {
+		for _, sub := range subtitles {
+			if sub != "" && strings.HasPrefix(sub, os.TempDir()) {
+				os.Remove(sub)
+			}
+		}
+	}()
+
 	hctx.StreamURL = url
 	hctx.Action = "play"
 	RunHook(cfg.Hooks.OnPlay, hctx, debug)
@@ -423,6 +431,14 @@ type PlayResult struct {
 // Returns a PlayResult containing the chosen action and the last tracked position.
 func PlayWithControls(url, title, referer, userAgent string, subtitles []string, debug bool, startSecs float64, hctx HookContext) (PlayResult, error) {
 	cfg := LoadConfig()
+
+	defer func() {
+		for _, sub := range subtitles {
+			if sub != "" && strings.HasPrefix(sub, os.TempDir()) {
+				os.Remove(sub)
+			}
+		}
+	}()
 
 	for {
 		fmt.Printf("Starting player for %s...\n", title)
