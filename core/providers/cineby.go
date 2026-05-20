@@ -208,7 +208,7 @@ func (c *Cineby) GetServers(episodeID string) ([]core.Server, error) {
 
 	serverID := fmt.Sprintf("%s/embed/movie/%s", VIDKING_BASE_URL, parts[0])
 	name := "VidKing"
-	if parts[1] != "0" {
+	if parts[1] != "0" && parts[1] != "movie" {
 		season, _ := strconv.Atoi(parts[1])
 		episode, _ := strconv.Atoi(parts[2])
 		serverID = fmt.Sprintf("%s/embed/tv/%s/%d/%d", VIDKING_BASE_URL, parts[0], season, episode)
@@ -245,15 +245,20 @@ func resolveVidKingEmbed(embedURL string, client *http.Client) (string, error) {
 	if output, err := exec.CommandContext(ctx, "agent-browser", append(sessionArgs, "open", embedURL)...).CombinedOutput(); err != nil {
 		return "", fmt.Errorf("failed to open VidKing embed: %w: %s", err, strings.TrimSpace(string(output)))
 	}
-	if output, err := exec.CommandContext(ctx, "agent-browser", append(sessionArgs, "wait", "9000")...).CombinedOutput(); err != nil {
-		return "", fmt.Errorf("failed waiting for VidKing playback: %w: %s", err, strings.TrimSpace(string(output)))
+	if output, err := exec.CommandContext(ctx, "agent-browser", append(sessionArgs, "wait", "--load", "networkidle")...).CombinedOutput(); err != nil {
+		// fallback to fixed wait if networkidle fails
+		if output2, err2 := exec.CommandContext(ctx, "agent-browser", append(sessionArgs, "wait", "9000")...).CombinedOutput(); err2 != nil {
+			return "", fmt.Errorf("failed waiting for VidKing playback: %w: %s", err2, strings.TrimSpace(string(output2)))
+		}
+		_ = output
 	}
 
 	script := `JSON.stringify({
 		m3u8s: performance.getEntriesByType('resource').map(r => r.name).filter(n => /\.m3u8(\?|$)/i.test(n)),
 		subtitles: [
 			...performance.getEntriesByType('resource').map(r => r.name).filter(n => /(\.(vtt|srt|ass)(\?|$)|\/(subtitles?|captions?)([/?#]|$))/i.test(n)),
-			...Array.from(document.querySelectorAll('track[src]')).map(t => t.src)
+			...Array.from(document.querySelectorAll('track[src]')).map(t => t.src),
+			...Array.from(document.querySelectorAll('video track[src]')).map(t => t.src)
 		],
 		subtitleAPIs: performance.getEntriesByType('resource').map(r => r.name).filter(n => /^https?:\/\/sub\.wyzie\.io\/search/i.test(n))
 	})`
@@ -266,6 +271,8 @@ func resolveVidKingEmbed(embedURL string, client *http.Client) (string, error) {
 	if len(m3u8s) == 0 {
 		return "", fmt.Errorf("no playable m3u8 found in VidKing embed")
 	}
+
+	// Fetch subtitles from wyzie API URLs captured by the browser (uses player's own key)
 	for _, apiURL := range subtitleAPIs {
 		apiSubtitles, err := fetchWyzieSubtitles(apiURL, client)
 		if err != nil {
@@ -273,6 +280,7 @@ func resolveVidKingEmbed(embedURL string, client *http.Client) (string, error) {
 		}
 		subtitles = append(subtitles, apiSubtitles...)
 	}
+
 	subtitles = dedupeURLs(subtitles)
 	if len(subtitles) > 0 {
 		return m3u8s[0] + "|subs=" + url.QueryEscape(strings.Join(subtitles, "\n")), nil
@@ -311,6 +319,37 @@ func extractSubtitleAPIURLs(text string) []string {
 }
 
 func fetchWyzieSubtitles(apiURL string, client *http.Client) ([]string, error) {
+	u, err := url.Parse(apiURL)
+	if err == nil {
+		q := u.Query()
+		// Only add our key if the URL doesn't already have one (player embeds its own key)
+		if q.Get("key") == "" {
+			q.Set("key", "wyzie-bpct649andjfotnyln2scnjl06h73d3a")
+		}
+		idVal := q.Get("id")
+		if idVal != "" && !strings.HasPrefix(idVal, "tt") {
+			var isNumeric = true
+			for _, char := range idVal {
+				if char < '0' || char > '9' {
+					isNumeric = false
+					break
+				}
+			}
+			if isNumeric {
+				mediaType := "movie"
+				if q.Get("season") != "" && q.Get("season") != "0" {
+					mediaType = "tv"
+				}
+				imdbID := core.GetIMDBIDFromTMDB(idVal, mediaType, client)
+				if imdbID != "" {
+					q.Set("id", imdbID)
+				}
+			}
+		}
+		u.RawQuery = q.Encode()
+		apiURL = u.String()
+	}
+
 	req, err := core.NewRequest("GET", apiURL)
 	if err != nil {
 		return nil, err
