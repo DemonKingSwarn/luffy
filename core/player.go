@@ -119,13 +119,13 @@ func buildPlayerCmd(url, title, referer, userAgent string, subtitles []string, d
 			"start",
 			"--user", "0",
 			"-a", "android.intent.action.VIEW",
-			"-d", url,
-			"-n", "org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity",
+			"-d", fmt.Sprintf("%s", url),
+			"-n", "is.xyz.mpv/.MPVActivity",
 			"-e", "title", fmt.Sprintf("Playing %s", title),
 		}
-		if len(subtitles) > 0 {
-			args = append(args, "--es", "subtitles_location", subtitles[0])
-		}
+		/*if len(subtitles) > 0 {
+			args = append(args, "--es", "subtitles_location", fmt.Sprintf("%s", subtitles[0]))
+		}*/
 		cmd = exec.Command("am", args...)
 		return cmd, nil
 	}

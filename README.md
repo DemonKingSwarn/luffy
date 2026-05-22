@@ -176,7 +176,7 @@ chmod +x $PREFIX/bin/luffy
 - [`mpv`](https://mpv.io) - Video Player for Linux and Windows
 - [`vlc`](https://www.videolan.org/vlc/) - Alternate video player for Linux and Windows
 - [`iina`](https://iina.io) - Video Player for MacOS
-- [`vlc-android`](https://play.google.com/store/apps/details?id=org.videolan.vlc) - Video Player for Android
+- [`mpv-android`](https://play.google.com/store/apps/details?id=is.xyz.mpv&hl=en-US&pli=1) - Video Player for Android
 - [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) - Download manager
 - [`fzf`](https://github.com/junegunn/fzf) - For selection menus
 - [`chafa`](https://github.com/hpjansson/chafa) & [`libsixel`](https://github.com/saitoha/libsixel) - For poster previews (`--show-image`)
