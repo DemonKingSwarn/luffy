@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/demonkingswarn/luffy/core"
+	cinebyproviders "github.com/demonkingswarn/luffy/core/cineby_providers"
 )
 
 const (
@@ -116,7 +116,7 @@ func (f *Fmovies) GetMediaID(mediaURL string) (string, error) {
 		mediaType = "series"
 	}
 
-	return strings.Join([]string{parts[1], mediaType}, "|"), nil
+	return fmt.Sprintf("%s|%s|%s|%s", parts[1], mediaType, u.Query().Get("title"), u.Query().Get("year")), nil
 }
 
 func (f *Fmovies) GetSeasons(mediaID string) ([]core.Season, error) {
@@ -147,7 +147,7 @@ func (f *Fmovies) GetSeasons(mediaID string) ([]core.Season, error) {
 			continue
 		}
 		seasons = append(seasons, core.Season{
-			ID:   fmt.Sprintf("%s|%d", parts[0], s.SeasonNumber),
+			ID:   fmt.Sprintf("%s|%s|%d|%s|%s", parts[0], parts[1], s.SeasonNumber, safePart(parts, 2), safePart(parts, 3)),
 			Name: s.Name,
 		})
 	}
@@ -157,13 +157,13 @@ func (f *Fmovies) GetSeasons(mediaID string) ([]core.Season, error) {
 func (f *Fmovies) GetEpisodes(id string, isSeason bool) ([]core.Episode, error) {
 	parts := strings.Split(id, "|")
 	if !isSeason {
-		return []core.Episode{{ID: fmt.Sprintf("%s|0|0", parts[0]), Name: "Movie"}}, nil
+		return []core.Episode{{ID: fmt.Sprintf("%s|%s|0|0|%s|%s", parts[0], safePart(parts, 1), safePart(parts, 2), safePart(parts, 3)), Name: "Movie"}}, nil
 	}
-	if len(parts) < 2 {
+	if len(parts) < 3 {
 		return nil, fmt.Errorf("invalid fmovies season ID")
 	}
 
-	req, err := f.newTMDBRequest(fmt.Sprintf("tv/%s/season/%s", parts[0], parts[1]), url.Values{})
+	req, err := f.newTMDBRequest(fmt.Sprintf("tv/%s/season/%s", parts[0], parts[2]), url.Values{})
 	if err != nil {
 		return nil, err
 	}
@@ -182,33 +182,25 @@ func (f *Fmovies) GetEpisodes(id string, isSeason bool) ([]core.Episode, error) 
 	var episodes []core.Episode
 	for _, e := range data.Episodes {
 		episodes = append(episodes, core.Episode{
-			ID:   fmt.Sprintf("%s|%s|%d", parts[0], parts[1], e.EpisodeNumber),
+			ID:   fmt.Sprintf("%s|%s|%s|%d|%s|%s", parts[0], parts[1], parts[2], e.EpisodeNumber, safePart(parts, 3), safePart(parts, 4)),
 			Name: fmt.Sprintf("E%02d - %s", e.EpisodeNumber, e.Name),
 		})
 	}
 	return episodes, nil
 }
 
+func safePart(parts []string, idx int) string {
+	if idx < len(parts) {
+		return parts[idx]
+	}
+	return ""
+}
+
 func (f *Fmovies) GetServers(episodeID string) ([]core.Server, error) {
-	parts := strings.Split(episodeID, "|")
-	if len(parts) < 3 {
-		return nil, fmt.Errorf("invalid fmovies episode ID")
-	}
-
-	tmdbID := parts[0]
-	season, _ := strconv.Atoi(parts[1])
-	episode, _ := strconv.Atoi(parts[2])
-
-	var embedURL string
-	if season == 0 && episode == 0 {
-		embedURL = fmt.Sprintf("%s/embed/movie/%s", VIDKING_BASE_URL, tmdbID)
-	} else {
-		embedURL = fmt.Sprintf("%s/embed/tv/%s/%d/%d", VIDKING_BASE_URL, tmdbID, season, episode)
-	}
-
-	return []core.Server{{ID: embedURL, Name: "Fmovies"}}, nil
+	return []core.Server{{ID: episodeID, Name: "Fmovies"}}, nil
 }
 
 func (f *Fmovies) GetLink(serverID string) (string, error) {
-	return resolveVidKingEmbed(serverID, f.Client)
+	vp := cinebyproviders.NewVideasy(f.Client)
+	return vp.GetLink(serverID)
 }

@@ -7,6 +7,7 @@ require (
 	github.com/demonkingswarn/fzf.go v0.0.5
 	github.com/diniamo/gopv v0.0.0-20251028165920-b71b8f821a6c
 	github.com/spf13/cobra v1.10.2
+	github.com/tetratelabs/wazero v1.11.0
 	golang.org/x/term v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.46.1

@@ -28,7 +28,6 @@ var (
 	bestFlag      bool
 	historyFlag   bool
 	recommendFlag bool
-	browserFlag   bool
 )
 
 // episodeWithNum pairs an episode with its 1-based number within the season.
@@ -66,7 +65,6 @@ func init() {
 	rootCmd.Flags().BoolVarP(&bestFlag, "best", "b", false, "Auto-select best quality")
 	rootCmd.Flags().BoolVarP(&historyFlag, "history", "H", false, "Pick from watch history and resume")
 	rootCmd.Flags().BoolVarP(&recommendFlag, "recommend", "r", false, "Show recommendations based on watch history")
-	rootCmd.Flags().BoolVarP(&browserFlag, "watch-in-browser", "w", false, "Open embed URL in browser")
 
 	rootCmd.AddCommand(previewCmd)
 	previewCmd.Flags().StringVar(&backendFlag, "backend", "sixel", "Image backend")
@@ -99,7 +97,7 @@ var rootCmd = &cobra.Command{
 			provider = providers.NewAnime(client)
 		} else if strings.EqualFold(providerName, "anime-dub") || strings.EqualFold(providerName, "allanime-dub") {
 			provider = providers.NewAnimeDub(client)
-		} else if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") {
+		} else if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") {
 			provider = providers.NewCineby(client)
 		} else if strings.EqualFold(providerName, "youtube") {
 			provider = providers.NewYouTube(client)
@@ -151,7 +149,7 @@ var rootCmd = &cobra.Command{
 				histProvider = providers.NewYouTube(client)
 			case "anime-dub", "allanime-dub":
 				histProvider = providers.NewAnimeDub(client)
-			case "cineby", "vidking":
+			case "cineby", "vidking", "videasy":
 				histProvider = providers.NewCineby(client)
 			default:
 				histProviderName = "cineby"
@@ -816,7 +814,7 @@ func resolveStreamURL(
 	if isAnimeProvider(providerName) {
 		referer = "https://allmanga.to"
 	}
-	if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") {
+	if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") {
 		referer = "https://www.vidking.net/"
 	}
 
@@ -845,7 +843,7 @@ func resolveStreamURL(
 		if streamURL == "" {
 			streamURL = link
 		}
-	} else if isAnimeProvider(providerName) || strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "youtube") {
+	} else if isAnimeProvider(providerName) || strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") || strings.EqualFold(providerName, "youtube") {
 		streamURL = link
 		if idx := strings.Index(streamURL, "|referer="); idx != -1 {
 			refererStr := streamURL[idx+9:]
@@ -885,14 +883,10 @@ func resolveStreamURL(
 		streamURL, subtitles, decryptedReferer, err = core.DecryptStream(link, ctx.Client)
 		if err != nil {
 			fmt.Printf("Decryption failed for %s: %v\n", name, err)
-			if browserFlag || strings.Contains(err.Error(), "Cloudflare") || strings.Contains(err.Error(), "turnstile") {
-				fmt.Println("Opening embed URL in your default browser...")
-				fmt.Println("Watch the video there, then press Ctrl+C to exit.")
-				openURL(link)
+			if strings.Contains(err.Error(), "Cloudflare") || strings.Contains(err.Error(), "turnstile") {
 				return streamURL, referer, subtitles, nil
-			} else {
-				return
 			}
+			return
 		}
 		if decryptedReferer != "" {
 			referer = decryptedReferer
@@ -1059,17 +1053,6 @@ func buildProcessStream(
 			})
 			if playErr != nil {
 				fmt.Println("Error playing:", playErr)
-				if bestFlag && browserFlag {
-					fmt.Println("Trying Cineby in browser...")
-					vidsrcURL, verr := getCinebyURL(ctx.Title, season > 0, ctx.Client, debugMode)
-					if verr != nil {
-						fmt.Println("Failed to get Cineby URL:", verr)
-						return playErr
-					}
-					fmt.Printf("Opening: %s\n", vidsrcURL)
-					openURL(vidsrcURL)
-					return nil
-				}
 				return playErr
 			}
 			saveHistory(histDB, ctx, providerName, season, episode, epName, posSecs, debugMode)
