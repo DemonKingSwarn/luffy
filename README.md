@@ -59,7 +59,7 @@
   - [Hooks](#hooks)
 - [Providers](#providers)
 
- > [!NOTE] 
+ > [!NOTE]
  > Before creating an issue, make sure to update luffy
 
 ## Installation
@@ -166,7 +166,7 @@ Install termux [(Guide)](https://termux.com/)
 ```sh
 pkg up -y
 pkg in fzf python-yt-dlp
-curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.1.5/luffy-android-arm64" -o $PREFIX/bin/luffy
+curl -sL "https://github.com/DemonKingSwarn/luffy/releases/download/v1.2.1/luffy-android-arm64" -o $PREFIX/bin/luffy
 chmod +x $PREFIX/bin/luffy
 ```
 
@@ -339,7 +339,7 @@ You can set the default provider in the config file (`~/.config/luffy/config.yam
 
 | Provider | `provider:` value | Content | Notes |
 |----------|-------------------|---------|-------|
-| Cineby | `cineby` | Movies & TV | Default. Uses VidKing embeds. Requires `agent-browser`. |
+| Cineby | `cineby` | Movies & TV | Default. Uses VidKing embeds. |
 | Anime (sub) | `anime` or `allanime` | Anime | Subtitled. Uses AllAnime. |
 | Anime (dub) | `anime-dub` or `allanime-dub` | Anime | Dubbed. Uses AllAnime. |
 
@@ -347,9 +347,6 @@ Example config:
 ```yaml
 provider: cineby
 ```
-
-> [!NOTE]
-> The cineby provider requires [`agent-browser`](https://github.com/steel-dev/agent-browser) to resolve streams. Make sure it is installed and available on your `PATH`.
 
 ---
 
@@ -383,14 +380,9 @@ Please try these steps first:
 
 2. **Run with `--debug`** and read the output — it usually tells you exactly what failed.
 
-3. **Check if `agent-browser` is installed** (required for the cineby provider):
-   ```bash
-   agent-browser --version
-   ```
+3. **Try a different title** — the content may be unavailable on the provider.
 
-4. **Try a different title** — the content may be unavailable on the provider.
-
-5. **Check the [Discord](https://discord.gg/JF85vTkDyC)** — someone may have already reported the same issue.
+4. **Check the [Discord](https://discord.gg/JF85vTkDyC)** — someone may have already reported the same issue.
 
 If none of the above helps, open an issue and include:
 - The exact command you ran
