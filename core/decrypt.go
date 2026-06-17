@@ -92,7 +92,7 @@ func DecryptVidsrc(urlStr string, client *http.Client) (string, []string, string
 		return "", nil, "", err
 	}
 
-	if strings.Contains(urlStr, "cloudnestra.com/rcp/") {
+	if isCloudnestraRcpURL(urlStr) {
 		return decryptCloudnestraPage(urlStr, body, client, ua)
 	}
 
@@ -121,6 +121,15 @@ func decryptCloudnestraPage(urlStr string, body []byte, client *http.Client, use
 	cloudURL := urlStr
 	hash := extractCloudnestraHash(urlStr)
 
+	// Derive the actual cloudnestra-style host from the URL — the service
+	// has rotated through cloudnestra.com → cloudorchestranova.com → ... so
+	// hardcoding any single host breaks every time it migrates.
+	cloudHost := "cloudnestra.com"
+	if parsed, err := url.Parse(urlStr); err == nil && parsed.Host != "" {
+		cloudHost = parsed.Host
+	}
+	cloudOrigin := "https://" + cloudHost + "/"
+
 	if isCloudnestraChallenge(body) {
 		return "", nil, "", fmt.Errorf("vidsrc/cloudnestra is protected by a Cloudflare Turnstile challenge")
 	}
@@ -133,10 +142,10 @@ func decryptCloudnestraPage(urlStr string, body []byte, client *http.Client, use
 		}
 		return "", nil, "", fmt.Errorf("vidsrc/cloudnestra player flow changed or is blocked")
 	}
-	proUrl := "https://cloudnestra.com/prorcp/" + string(match[1])
+	proUrl := "https://" + cloudHost + "/prorcp/" + string(match[1])
 
 	req, _ := http.NewRequest("GET", proUrl, nil)
-	req.Header.Set("Referer", "https://cloudnestra.com/")
+	req.Header.Set("Referer", cloudOrigin)
 	req.Header.Set("User-Agent", userAgent)
 	resp, err := client.Do(req)
 	if err != nil {
@@ -155,7 +164,7 @@ func decryptCloudnestraPage(urlStr string, body []byte, client *http.Client, use
 	finalUrl := sanitizeMediaURL(rawM3u8)
 	placeholders := []string{"{v1}", "{v2}", "{v3}", "{v4}"}
 	for _, p := range placeholders {
-		finalUrl = strings.ReplaceAll(finalUrl, p, "cloudnestra.com")
+		finalUrl = strings.ReplaceAll(finalUrl, p, cloudHost)
 	}
 
 	if idx := strings.Index(finalUrl, " or "); idx != -1 {
@@ -190,7 +199,15 @@ func decryptCloudnestraPage(urlStr string, body []byte, client *http.Client, use
 		}
 	}
 
-	return finalUrl, subs, "https://cloudnestra.com/", nil
+	return finalUrl, subs, cloudOrigin, nil
+}
+
+// isCloudnestraRcpURL reports whether the URL points at a cloudnestra-style
+// /rcp/{hash} player page. The service rotates host names periodically
+// (cloudnestra.com, cloudorchestranova.com, ...) so we match the path shape.
+func isCloudnestraRcpURL(s string) bool {
+	re := regexp.MustCompile(`(?i)//cloud[a-z0-9-]*\.(?:com|net|org|live|ru|io)/rcp/`)
+	return re.MatchString(s)
 }
 
 func fetchHTML(client *http.Client, urlStr, referer, userAgent string) ([]byte, error) {
@@ -256,7 +273,7 @@ func extractIframeURL(body []byte, baseURL string) string {
 }
 
 func extractCloudnestraURL(body []byte) string {
-	re := regexp.MustCompile(`(?i)(?:src|href)=["'](?:(?:https?:)?//)?(cloudnestra\.com/rcp/[^"'?#]+)`)
+	re := regexp.MustCompile(`(?i)(?:src|href)=["'](?:(?:https?:)?//)?(cloud[a-z0-9-]*\.(?:com|net|org|live|ru|io)/rcp/[^"'?#]+)`)
 	match := re.FindSubmatch(body)
 	if len(match) < 2 {
 		return ""
@@ -266,7 +283,7 @@ func extractCloudnestraURL(body []byte) string {
 }
 
 func extractCloudnestraURLString(body string) string {
-	re := regexp.MustCompile(`(?i)(?:src|href)=["'](?:(?:https?:)?//)?(cloudnestra\.com/rcp/[^"'?#]+)`)
+	re := regexp.MustCompile(`(?i)(?:src|href)=["'](?:(?:https?:)?//)?(cloud[a-z0-9-]*\.(?:com|net|org|live|ru|io)/rcp/[^"'?#]+)`)
 	match := re.FindStringSubmatch(body)
 	if len(match) < 2 {
 		return ""
@@ -1170,7 +1187,7 @@ func DecryptVidsrcWithBrowser(urlStr string) (string, []string, string, error) {
 
 	const ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-	if strings.Contains(urlStr, "cloudnestra.com/rcp/") {
+	if isCloudnestraRcpURL(urlStr) {
 		return decryptCloudnestraPage(urlStr, []byte(html), &http.Client{}, ua)
 	}
 
