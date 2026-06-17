@@ -635,13 +635,14 @@ var rootCmd = &cobra.Command{
 		if ctx.ContentType == core.Movie {
 			fmt.Printf("\nProcessing: %s\n", ctx.Title)
 
-			serverLabels := make([]string, len(movieServers))
-			for i, s := range movieServers {
-				serverLabels[i] = s.Name
+			// Auto-pick the first server. Cruisehub orders embeds in
+			// preferred order (vidsrc-embed first since it's the only one
+			// with a working decryptor right now), so showing a fzf prompt
+			// for a list where 3/4 are dead just adds friction.
+			if len(movieServers) == 0 {
+				return fmt.Errorf("no servers available")
 			}
-
-			selectedServerIdx := core.Select("Servers:", serverLabels)
-			selectedServer := episodesToProcess[selectedServerIdx].ep
+			selectedServer := movieServers[0]
 
 			if currentAction == "play" {
 				fmt.Printf("\nLoading: %s\n", ctx.Title)

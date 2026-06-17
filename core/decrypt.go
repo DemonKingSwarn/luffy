@@ -157,7 +157,21 @@ func decryptCloudnestraPage(urlStr string, body []byte, client *http.Client, use
 	reFile := regexp.MustCompile(`file:\s*"(https://[^"]+)"`)
 	match = reFile.FindSubmatch(body)
 	if len(match) < 2 {
-		return "", nil, "", fmt.Errorf("could not find m3u8 file")
+		// The prorcp page sometimes serves a Cloudflare Turnstile
+		// challenge instead of the player (especially for movies).
+		// Fetch via headless chromedp so the JS auto-solves and the
+		// page reloads with `?_rcp={token}` exposing the real player.
+		if isCloudnestraChallenge(body) {
+			browser := NewBrowser()
+			bhtml, _, berr := browser.FetchWithBrowser(proUrl)
+			if berr != nil {
+				return "", nil, "", fmt.Errorf("prorcp turnstile; browser fallback failed: %w", berr)
+			}
+			match = reFile.FindSubmatch([]byte(bhtml))
+		}
+		if len(match) < 2 {
+			return "", nil, "", fmt.Errorf("could not find m3u8 file")
+		}
 	}
 	rawM3u8 := string(match[1])
 
