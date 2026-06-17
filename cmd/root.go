@@ -97,6 +97,9 @@ var rootCmd = &cobra.Command{
 			provider = providers.NewAnime(client)
 		} else if strings.EqualFold(providerName, "anime-dub") || strings.EqualFold(providerName, "allanime-dub") {
 			provider = providers.NewAnimeDub(client)
+		} else if strings.EqualFold(providerName, "cruisehub") || strings.EqualFold(providerName, "flix") {
+			providerName = "cruisehub"
+			provider = providers.NewCruisehub(client)
 		} else if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") {
 			provider = providers.NewCineby(client)
 		} else if strings.EqualFold(providerName, "youtube") {
