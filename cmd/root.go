@@ -93,20 +93,11 @@ var rootCmd = &cobra.Command{
 		}
 
 		var provider core.Provider
-		if strings.EqualFold(providerName, "anime") || strings.EqualFold(providerName, "allanime") {
-			provider = providers.NewAnime(client)
-		} else if strings.EqualFold(providerName, "anime-dub") || strings.EqualFold(providerName, "allanime-dub") {
-			provider = providers.NewAnimeDub(client)
-		} else if strings.EqualFold(providerName, "cruisehub") || strings.EqualFold(providerName, "flix") {
-			providerName = "cruisehub"
-			provider = providers.NewCruisehub(client)
-		} else if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") {
-			provider = providers.NewCineby(client)
-		} else if strings.EqualFold(providerName, "youtube") {
+		if strings.EqualFold(providerName, "youtube") {
 			provider = providers.NewYouTube(client)
 		} else {
-			providerName = "cineby"
-			provider = providers.NewCineby(client)
+			providerName = "cruisehub"
+			provider = providers.NewCruisehub(client)
 		}
 
 		// Open history DB once; non-fatal if it fails.
@@ -140,23 +131,19 @@ var rootCmd = &cobra.Command{
 			chosen := shows[hIdx]
 
 			// Build the right provider from what was recorded in history.
+			// Old provider names (cineby, allanime, sflix, etc.) map to cruisehub
+			// so existing history still resumes after the rewrite.
 			histProviderName := chosen.Provider
 			if histProviderName == "" {
 				histProviderName = providerName // fall back to current config
 			}
 			var histProvider core.Provider
 			switch strings.ToLower(histProviderName) {
-			case "anime", "allanime":
-				histProvider = providers.NewAnime(client)
 			case "youtube":
 				histProvider = providers.NewYouTube(client)
-			case "anime-dub", "allanime-dub":
-				histProvider = providers.NewAnimeDub(client)
-			case "cineby", "vidking", "videasy":
-				histProvider = providers.NewCineby(client)
 			default:
-				histProviderName = "cineby"
-				histProvider = providers.NewCineby(client)
+				histProviderName = "cruisehub"
+				histProvider = providers.NewCruisehub(client)
 			}
 
 			ctx.Title = chosen.Title
