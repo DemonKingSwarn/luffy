@@ -40,18 +40,18 @@ type Config struct {
 	// Example: ["--hwdec=auto", "--volume=80"]
 	MpvArgs []string    `yaml:"mpv_args"`
 	Hooks   HooksConfig `yaml:"hooks"`
-	YtLang string `yaml:"yt_language"`
+	YtLang  string      `yaml:"yt_language"`
 }
 
 func LoadConfig() *Config {
 	config := &Config{
-		FzfPath:      "fzf",    // Default
-		Player:       "mpv",    // Default player
-		ImageBackend: "sixel",  // Default image backend
-		Provider:     "flixhq", // Default provider
-		DlPath:       "",       // Default: use home directory
-		Quality:      "",       // Default: prompt user to select quality
-		YtLang: "", // Default: let youtube decide
+		FzfPath:      "fzf",       // Default
+		Player:       "mpv",       // Default player
+		ImageBackend: "sixel",     // Default image backend
+		Provider:     "cruisehub", // Default provider
+		DlPath:       "",          // Default: use home directory
+		Quality:      "",          // Default: prompt user to select quality
+		YtLang:       "",          // Default: let youtube decide
 	}
 
 	home, err := os.UserHomeDir()
@@ -73,10 +73,10 @@ func LoadConfig() *Config {
 			FzfPath:      "fzf",
 			Player:       "mpv",
 			ImageBackend: "sixel",
-			Provider:     "flixhq",
+			Provider:     "cruisehub",
 			DlPath:       "",
 			Quality:      "",
-			YtLang: "",
+			YtLang:       "",
 		}
 	}
 

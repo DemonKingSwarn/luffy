@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -154,9 +152,6 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			if strings.EqualFold(histProviderName, "sflix") {
-				mediaID = mediaID + "|series"
-			}
 
 			seasons, seasonsErr := histProvider.GetSeasons(mediaID)
 			if seasonsErr != nil || len(seasons) == 0 {
@@ -229,16 +224,6 @@ var rootCmd = &cobra.Command{
 				if len(episodesToProcess) > 0 {
 					selectedServer = episodesToProcess[0].ep
 				}
-				for _, ewn := range episodesToProcess {
-					if strings.EqualFold(histProviderName, "hdrezka") {
-						selectedServer = ewn.ep
-						break
-					}
-					if strings.Contains(strings.ToLower(ewn.ep.Name), "vidcloud") {
-						selectedServer = ewn.ep
-						break
-					}
-				}
 				link, err := histProvider.GetLink(selectedServer.ID)
 				if err != nil {
 					return fmt.Errorf("error getting link: %v", err)
@@ -281,14 +266,6 @@ var rootCmd = &cobra.Command{
 					continue
 				}
 				selectedServer := servers[0]
-				if !strings.EqualFold(histProviderName, "hdrezka") {
-					for _, s := range servers {
-						if strings.Contains(strings.ToLower(s.Name), "vidcloud") {
-							selectedServer = s
-							break
-						}
-					}
-				}
 				link, err := histProvider.GetLink(selectedServer.ID)
 				if err != nil {
 					fmt.Println("Error getting link:", err)
@@ -373,9 +350,6 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			if strings.EqualFold(providerName, "sflix") {
-				mediaID = mediaID + "|" + string(ctx.ContentType)
-			}
 
 			var episodesToProcess []episodeWithNum
 			selectedSeasonNum := 0
@@ -437,16 +411,6 @@ var rootCmd = &cobra.Command{
 				if len(episodesToProcess) > 0 {
 					selectedServer = episodesToProcess[0].ep
 				}
-				for _, ewn := range episodesToProcess {
-					if strings.EqualFold(providerName, "hdrezka") {
-						selectedServer = ewn.ep
-						break
-					}
-					if strings.Contains(strings.ToLower(ewn.ep.Name), "vidcloud") {
-						selectedServer = ewn.ep
-						break
-					}
-				}
 				link, err := provider.GetLink(selectedServer.ID)
 				if err != nil {
 					return fmt.Errorf("error getting link: %v", err)
@@ -489,14 +453,6 @@ var rootCmd = &cobra.Command{
 					continue
 				}
 				selectedServer := servers[0]
-				if !strings.EqualFold(providerName, "hdrezka") {
-					for _, s := range servers {
-						if strings.Contains(strings.ToLower(s.Name), "vidcloud") {
-							selectedServer = s
-							break
-						}
-					}
-				}
 				link, err := provider.GetLink(selectedServer.ID)
 				if err != nil {
 					fmt.Println("Error getting link:", err)
@@ -573,13 +529,6 @@ var rootCmd = &cobra.Command{
 		})
 		if err != nil {
 			return err
-		}
-
-		// For sflix, append media type to mediaID to help with server detection
-		// Format: "mediaID|type" (e.g., "39506|series" or "39506|movie")
-		// Braflix doesn't need this as it uses the same endpoint for both
-		if strings.EqualFold(providerName, "sflix") {
-			mediaID = mediaID + "|" + string(ctx.ContentType)
 		}
 
 		var episodesToProcess []episodeWithNum
@@ -694,14 +643,6 @@ var rootCmd = &cobra.Command{
 			selectedServerIdx := core.Select("Servers:", serverLabels)
 			selectedServer := episodesToProcess[selectedServerIdx].ep
 
-			// Auto-select Vidcloud if available (common for flixhq/sflix)
-			for _, ewn := range episodesToProcess {
-				if strings.Contains(strings.ToLower(ewn.ep.Name), "vidcloud") {
-					selectedServer = ewn.ep
-					break
-				}
-			}
-
 			if currentAction == "play" {
 				fmt.Printf("\nLoading: %s\n", ctx.Title)
 				link, err := provider.GetLink(selectedServer.ID)
@@ -761,14 +702,6 @@ var rootCmd = &cobra.Command{
 				}
 
 				selectedServer := servers[0]
-				if !strings.EqualFold(providerName, "hdrezka") {
-					for _, s := range servers {
-						if strings.Contains(strings.ToLower(s.Name), "vidcloud") {
-							selectedServer = s
-							break
-						}
-					}
-				}
 
 				link, err := provider.GetLink(selectedServer.ID)
 				if err != nil {
@@ -787,7 +720,16 @@ var rootCmd = &cobra.Command{
 }
 
 // resolveStreamURL takes a raw provider link and returns the final playable
+// resolveStreamURL takes a raw provider link and returns the final playable
 // stream URL, the referer to use, and any subtitle URLs.
+//
+// Two paths:
+//   - youtube: the link is already a watchable URL; pass it through.
+//   - everything else (cruisehub embeds): hand off to core.DecryptStream which
+//     routes to the embed-specific decryptor (vidlink, vidsrc, etc.).
+//
+// If the resulting stream is an m3u8 master playlist, fetch quality variants
+// and either auto-pick the best (--best / quality: best) or prompt via fzf.
 func resolveStreamURL(
 	link string,
 	ctx *core.Context,
@@ -798,73 +740,9 @@ func resolveStreamURL(
 	best bool,
 ) (streamURL, referer string, subtitles []string, err error) {
 	referer = link
-	if strings.EqualFold(providerName, "hdrezka") {
-		referer = ctx.URL
-	}
-	if isAnimeProvider(providerName) {
-		referer = "https://allmanga.to"
-	}
-	if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") {
-		referer = "https://www.vidking.net/"
-	}
 
-	if strings.EqualFold(providerName, "hdrezka") {
-		streams := strings.Split(link, ",")
-		bestQuality := 0
-		for _, s := range streams {
-			s = strings.TrimSpace(s)
-			if strings.HasPrefix(s, "[") {
-				end := strings.Index(s, "]")
-				if end > 1 {
-					qualityStr := s[1:end]
-					qualityStr = strings.TrimSuffix(qualityStr, "p")
-					q, _ := strconv.Atoi(qualityStr)
-					if q > bestQuality {
-						bestQuality = q
-						streamURL = s[end+1:]
-					}
-				}
-			} else {
-				if streamURL == "" {
-					streamURL = s
-				}
-			}
-		}
-		if streamURL == "" {
-			streamURL = link
-		}
-	} else if isAnimeProvider(providerName) || strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") || strings.EqualFold(providerName, "youtube") {
+	if strings.EqualFold(providerName, "youtube") {
 		streamURL = link
-		if idx := strings.Index(streamURL, "|referer="); idx != -1 {
-			refererStr := streamURL[idx+9:]
-			streamURL = streamURL[:idx]
-			if next := strings.Index(refererStr, "|"); next != -1 {
-				streamURL += refererStr[next:]
-				refererStr = refererStr[:next]
-			}
-			if decoded, decodeErr := url.QueryUnescape(refererStr); decodeErr == nil {
-				refererStr = decoded
-			}
-			if refererStr != "" {
-				referer = refererStr
-			}
-		}
-		if idx := strings.Index(streamURL, "|subs="); idx != -1 {
-			subsStr := streamURL[idx+6:]
-			streamURL = streamURL[:idx]
-			if decoded, decodeErr := url.QueryUnescape(subsStr); decodeErr == nil {
-				subsStr = decoded
-			}
-			sep := ","
-			if strings.Contains(subsStr, "\n") {
-				sep = "\n"
-			}
-			for _, sub := range strings.Split(subsStr, sep) {
-				if sub = strings.TrimSpace(sub); sub != "" {
-					subtitles = append(subtitles, sub)
-				}
-			}
-		}
 	} else {
 		if debugMode {
 			fmt.Println("Decrypting stream...")
@@ -881,18 +759,9 @@ func resolveStreamURL(
 		if decryptedReferer != "" {
 			referer = decryptedReferer
 		}
-
-		if strings.EqualFold(providerName, "sflix") || strings.EqualFold(providerName, "braflix") {
-			if parsedURL, parseErr := url.Parse(link); parseErr == nil {
-				referer = fmt.Sprintf("%s://%s/", parsedURL.Scheme, parsedURL.Host)
-			} else {
-				referer = link
-			}
-		}
 	}
 
-	if strings.Contains(strings.ToLower(streamURL), ".m3u8") ||
-		(strings.EqualFold(providerName, "cinebolt") && !best && !strings.EqualFold(cfg.Quality, "best")) {
+	if strings.Contains(strings.ToLower(streamURL), ".m3u8") {
 		if debugMode {
 			fmt.Println("Fetching available qualities...")
 			fmt.Printf("Master m3u8 URL: %s\n", streamURL)
@@ -937,11 +806,6 @@ func resolveStreamURL(
 	return
 }
 
-func isAnimeProvider(providerName string) bool {
-	return strings.EqualFold(providerName, "anime") || strings.EqualFold(providerName, "anime-dub") ||
-		strings.EqualFold(providerName, "allanime") || strings.EqualFold(providerName, "allanime-dub")
-}
-
 func appendUniqueStrings(values []string, candidates ...string) []string {
 	seen := make(map[string]bool, len(values)+len(candidates))
 	for _, value := range values {
@@ -958,6 +822,9 @@ func appendUniqueStrings(values []string, candidates ...string) []string {
 }
 
 // getLinkForEpisode resolves the raw provider link for a given episodeWithNum.
+// The first server in the list wins; cruisehub returns embeds in preferred
+// order (vidsrc-embed first since core.DecryptStream handles both movie and
+// tv formats), so this is a deliberate auto-pick.
 func getLinkForEpisode(ewn episodeWithNum, prov core.Provider, providerName string) (string, error) {
 	servers, err := prov.GetServers(ewn.ep.ID)
 	if err != nil {
@@ -966,16 +833,7 @@ func getLinkForEpisode(ewn episodeWithNum, prov core.Provider, providerName stri
 	if len(servers) == 0 {
 		return "", fmt.Errorf("no servers found for episode")
 	}
-	selectedServer := servers[0]
-	if !strings.EqualFold(providerName, "hdrezka") {
-		for _, s := range servers {
-			if strings.Contains(strings.ToLower(s.Name), "vidcloud") {
-				selectedServer = s
-				break
-			}
-		}
-	}
-	return prov.GetLink(selectedServer.ID)
+	return prov.GetLink(servers[0].ID)
 }
 
 // getLastPosition returns the saved playback position in seconds for a
