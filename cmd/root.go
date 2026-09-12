@@ -914,6 +914,14 @@ func resolveStreamURL(
 		}
 	}
 
+	// Cinejoy masters carry their audio as a separate rendition group; handing
+	// a bare variant playlist to the player loses audio entirely. The master
+	// itself (with its DEFAULT=YES variant and audio group) is passed through
+	// so the player picks both tracks itself.
+	if strings.EqualFold(providerName, "cinejoy") {
+		return
+	}
+
 	if strings.Contains(strings.ToLower(streamURL), ".m3u8") ||
 		(strings.EqualFold(providerName, "cinebolt") && !best && !strings.EqualFold(cfg.Quality, "best")) {
 		if debugMode {

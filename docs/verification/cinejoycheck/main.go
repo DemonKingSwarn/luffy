@@ -119,18 +119,10 @@ func main() {
 }
 
 func cliMpvProof(streamURL string) error {
-	// Replicate resolveStreamURL's quality stage (referer only, no Origin) so
-	// we exercise the same fetch the CLI performs.
-	qualities, directURL, qErr := core.GetQualities(streamURL, core.NewClient(), providers.CinejoyBaseURL+"/")
-	if qErr == nil && len(qualities) > 0 {
-		selected, selErr := core.SelectQuality(qualities, true)
-		if selErr == nil {
-			streamURL = selected
-		}
-	} else if directURL != "" {
-		streamURL = directURL
-	}
-	fmt.Printf("quality stage: qErr=%v directURL=%q\n", qErr != nil, directURL)
+	// Mirror the fixed CLI behavior for cinejoy: the master playlist (with its
+	// separate audio rendition group) goes straight to the player. No variant
+	// extraction, which would strip the audio group and play silent video.
+	fmt.Printf("quality stage: skipped for cinejoy (master passthrough)\n")
 
 	// Mirror buildPlayerCmd's default (non-darwin, non-vlc) mpv invocation.
 	args := []string{
