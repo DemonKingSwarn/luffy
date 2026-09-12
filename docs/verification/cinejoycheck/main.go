@@ -29,6 +29,7 @@ func main() {
 	tmdb := flag.String("tmdb", "", "resolve a movie by TMDB id only (skips search)")
 	episode := flag.Int("episode", 1, "episode number to resolve for series")
 	play := flag.Bool("play", false, "run 3s headless mpv decode proof")
+	playCLI := flag.Bool("play-cli", false, "run mpv with the same invocation the CLI uses")
 	flag.Parse()
 	if *query == "" && *tmdb == "" {
 		fmt.Fprintln(os.Stderr, "cinéjoycheck: -q or -tmdb is required")
@@ -98,6 +99,13 @@ func main() {
 	}
 	fmt.Printf("resolved in %s: %s\n", time.Since(start).Round(time.Millisecond), redact(streamURL))
 
+	if *playCLI {
+		if err := cliMpvProof(streamURL); err != nil {
+			fatal("cli playback", err)
+		}
+		fmt.Println("OK (CLI-style mpv exited normally)")
+		os.Exit(0)
+	}
 	if !*play {
 		fmt.Println("OK (resolution only; pass -play for the decode proof)")
 		os.Exit(0)
@@ -108,6 +116,46 @@ func main() {
 	}
 	fmt.Println("OK (mpv decoded 3s of video and audio)")
 	os.Exit(0)
+}
+
+func cliMpvProof(streamURL string) error {
+	// Replicate resolveStreamURL's quality stage (referer only, no Origin) so
+	// we exercise the same fetch the CLI performs.
+	qualities, directURL, qErr := core.GetQualities(streamURL, core.NewClient(), providers.CinejoyBaseURL+"/")
+	if qErr == nil && len(qualities) > 0 {
+		selected, selErr := core.SelectQuality(qualities, true)
+		if selErr == nil {
+			streamURL = selected
+		}
+	} else if directURL != "" {
+		streamURL = directURL
+	}
+	fmt.Printf("quality stage: qErr=%v directURL=%q\n", qErr != nil, directURL)
+
+	// Mirror buildPlayerCmd's default (non-darwin, non-vlc) mpv invocation.
+	args := []string{
+		streamURL,
+		"--referrer=" + providers.CinejoyBaseURL + "/",
+		"--user-agent=" + userAgent,
+		"--force-media-title=Playing CLI replication",
+	}
+	args = append(args, "--input-ipc-server=/tmp/cinejoycheck-mpv.sock")
+	os.Remove("/tmp/cinejoycheck-mpv.sock")
+	args = append(args, "--http-header-fields=Origin: "+providers.CinejoyBaseURL)
+
+	cmd := exec.Command("mpv", args...)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	timer := time.AfterFunc(60*time.Second, func() {
+		cmd.Process.Kill() //nolint:errcheck
+	})
+	err := cmd.Wait()
+	timer.Stop()
+	os.Remove("/tmp/cinejoycheck-mpv.sock")
+	return err
 }
 
 func decodeProof(streamURL string) error {

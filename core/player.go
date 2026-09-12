@@ -475,6 +475,10 @@ func PlayWithControls(url, title, referer, userAgent, origin string, subtitles [
 			return PlayResult{Action: PlaybackQuit}, err
 		}
 
+		// Start the startup window before the IPC connect below, which itself
+		// can take a couple of seconds while the socket appears.
+		playerStart := time.Now()
+
 		// Connect to IPC and keep a live position counter.
 		var ipcClient *gopv.Client
 		var posMu sync.Mutex
@@ -515,12 +519,15 @@ func PlayWithControls(url, title, referer, userAgent, origin string, subtitles [
 			close(done)
 		}()
 
-		if debug {
-			select {
-			case <-done:
-				return PlayResult{Action: PlaybackQuit}, fmt.Errorf("player exited immediately after launch")
-			case <-time.After(1500 * time.Millisecond):
-			}
+		// Give the player time to actually start before showing the control
+		// menu; the menu shows before the window otherwise and an accidental
+		// Enter there is treated as Quit. Immediate exits are real errors,
+		// not silent closes. The window is anchored to player launch, not to
+		// after connectMPVIPC, which can spend seconds waiting for the socket.
+		select {
+		case <-done:
+			return PlayResult{Action: PlaybackQuit}, fmt.Errorf("player exited immediately after launch (check the player and stream)")
+		case <-time.After(time.Until(playerStart.Add(3 * time.Second))):
 		}
 
 		chosen := SelectActionCtx("Playback:", []string{
