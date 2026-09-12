@@ -145,6 +145,9 @@ func buildPlayerCmd(url, title, referer, userAgent, origin string, subtitles []s
 			if origin != "" {
 				args = append(args, fmt.Sprintf("--http-header-fields=Origin: %s", origin))
 			}
+			if cfg.AudioDelay != 0 {
+				args = append(args, fmt.Sprintf("--audio-delay=%g", cfg.AudioDelay))
+			}
 			for _, sub := range subtitles {
 				if sub != "" {
 					args = append(args, fmt.Sprintf("--sub-file=%s", sub))
@@ -206,6 +209,9 @@ func buildPlayerCmd(url, title, referer, userAgent, origin string, subtitles []s
 			}
 			if origin != "" {
 				args = append(args, fmt.Sprintf("--http-header-fields=Origin: %s", origin))
+			}
+			if cfg.AudioDelay != 0 {
+				args = append(args, fmt.Sprintf("--audio-delay=%g", cfg.AudioDelay))
 			}
 			for _, sub := range subtitles {
 				if sub != "" {
