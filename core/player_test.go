@@ -25,6 +25,15 @@ func TestPlaybackPreservesSuppliedSubtitles(t *testing.T) {
 	argsFile := filepath.Join(root, "args")
 	t.Setenv("LUFFY_TEST_ARGS", argsFile)
 
+	// Fixture config: exercise audio_delay forwarding to the player.
+	cfgDir := filepath.Join(root, ".config", "luffy")
+	if err := os.MkdirAll(cfgDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("audio_delay: 0.25\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
 	// Avoid an interactive fzf menu even when go test runs from a terminal.
 	stdin, err := os.Open(os.DevNull)
 	if err != nil {
@@ -45,8 +54,14 @@ func TestPlaybackPreservesSuppliedSubtitles(t *testing.T) {
 			t.Run(entry+"/"+launch, func(t *testing.T) {
 				player := filepath.Join(bin, "mpv")
 				if launch == "success" {
-					// Capture forwarding and leave an IPC fixture for the owner to clean.
-					script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$LUFFY_TEST_ARGS\"\nfor arg do\n case $arg in --input-ipc-server=*) : > \"${arg#--input-ipc-server=}\";; esac\ndone\n"
+					// Capture forwarding, leave an IPC fixture for the owner to
+					// clean, and stay alive so PlayWithControls treats the
+					// player as started before showing its control menu. The
+					// isolated PATH needs a sleep stub for the script.
+					if err := os.WriteFile(filepath.Join(bin, "sleep"), []byte("#!/bin/sh\nexec /usr/bin/sleep \"$@\"\n"), 0700); err != nil {
+						t.Fatal(err)
+					}
+					script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$LUFFY_TEST_ARGS\"\nfor arg do\n case $arg in --input-ipc-server=*) : > \"${arg#--input-ipc-server=}\";; esac\ndone\nsleep 5\n"
 					if err := os.WriteFile(player, []byte(script), 0700); err != nil {
 						t.Fatal(err)
 					}
@@ -61,9 +76,9 @@ func TestPlaybackPreservesSuppliedSubtitles(t *testing.T) {
 
 				var playErr error
 				if entry == "Play" {
-					_, playErr = Play("https://example.invalid/video", "test", "", "", subtitles, false, 0, HookContext{})
+					_, playErr = Play("https://example.invalid/video", "test", "", "", "", subtitles, false, 0, HookContext{})
 				} else {
-					_, playErr = PlayWithControls("https://example.invalid/video", "test", "", "", subtitles, false, 0, HookContext{})
+					_, playErr = PlayWithControls("https://example.invalid/video", "test", "", "", "", subtitles, false, 0, HookContext{})
 				}
 				if launch == "success" && playErr != nil {
 					t.Fatal(playErr)
@@ -89,6 +104,9 @@ func TestPlaybackPreservesSuppliedSubtitles(t *testing.T) {
 					}
 					if strings.Contains(string(data), "--sub-file=\n") {
 						t.Error("empty subtitle was forwarded")
+					}
+					if !strings.Contains(string(data), "--audio-delay=0.25\n") {
+						t.Error("audio_delay was not forwarded to the player")
 					}
 				}
 				entries, err := os.ReadDir(filepath.Join(tmp, "mpvsockets"))
