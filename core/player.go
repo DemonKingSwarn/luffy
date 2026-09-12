@@ -95,8 +95,10 @@ func generateSocketPath() (string, error) {
 // so we can connect via gopv IPC to track position.
 // startSecs, if > 0, tells mpv to seek to that position before playing.
 // cfg, if non-nil, is used to append MpvArgs; if nil LoadConfig() is called.
+// origin, if non-empty, is sent as an Origin header by mpv (some CDNs like
+// Cinejoy's Lisbon/Solara require it).
 // It does NOT start the process.
-func buildPlayerCmd(url, title, referer, userAgent string, subtitles []string, debug bool, socketPath string, startSecs float64, cfg *Config) (*exec.Cmd, error) {
+func buildPlayerCmd(url, title, referer, userAgent, origin string, subtitles []string, debug bool, socketPath string, startSecs float64, cfg *Config) (*exec.Cmd, error) {
 	if runtime.GOOS == "windows" {
 		mpv_executable = "mpv.exe"
 		vlc_executable = "vlc.exe"
@@ -139,6 +141,9 @@ func buildPlayerCmd(url, title, referer, userAgent string, subtitles []string, d
 				fmt.Sprintf("--referrer=%s", referer),
 				fmt.Sprintf("--user-agent=%s", userAgent),
 				fmt.Sprintf("--force-media-title=Playing %s", title),
+			}
+			if origin != "" {
+				args = append(args, fmt.Sprintf("--http-header-fields=Origin: %s", origin))
 			}
 			for _, sub := range subtitles {
 				if sub != "" {
@@ -198,6 +203,9 @@ func buildPlayerCmd(url, title, referer, userAgent string, subtitles []string, d
 				fmt.Sprintf("--referrer=%s", referer),
 				fmt.Sprintf("--user-agent=%s", userAgent),
 				fmt.Sprintf("--force-media-title=Playing %s", title),
+			}
+			if origin != "" {
+				args = append(args, fmt.Sprintf("--http-header-fields=Origin: %s", origin))
 			}
 			for _, sub := range subtitles {
 				if sub != "" {
@@ -263,8 +271,9 @@ func readPositionViaIPC(client *gopv.Client) float64 {
 
 // Play starts the player and blocks until it exits.
 // hctx provides metadata for lifecycle hooks (on_play / on_exit).
+// origin, if non-empty, is sent as an Origin header by mpv.
 // Returns the final playback position in seconds; 0 if not tracked.
-func Play(url, title, referer, userAgent string, subtitles []string, debug bool, startSecs float64, hctx HookContext) (float64, error) {
+func Play(url, title, referer, userAgent, origin string, subtitles []string, debug bool, startSecs float64, hctx HookContext) (float64, error) {
 	cfg := LoadConfig()
 
 	hctx.StreamURL = url
@@ -283,7 +292,7 @@ func Play(url, title, referer, userAgent string, subtitles []string, debug bool,
 		}
 	}
 
-	cmd, err := buildPlayerCmd(url, title, referer, userAgent, subtitles, debug, socketPath, startSecs, cfg)
+	cmd, err := buildPlayerCmd(url, title, referer, userAgent, origin, subtitles, debug, socketPath, startSecs, cfg)
 	if err != nil {
 		return 0, err
 	}
@@ -364,9 +373,10 @@ func Play(url, title, referer, userAgent string, subtitles []string, debug bool,
 // socketPath, if non-empty, is the IPC socket path passed to mpv.
 // startSecs, if > 0, tells mpv to seek to that position before playing.
 // cfg is used to append MpvArgs; if nil, LoadConfig() is called internally.
+// origin, if non-empty, is sent as an Origin header by mpv.
 // Returns the running *exec.Cmd so the caller can wait on or kill it.
-func StartPlayer(url, title, referer, userAgent string, subtitles []string, debug bool, socketPath string, startSecs float64, cfg *Config) (*exec.Cmd, error) {
-	cmd, err := buildPlayerCmd(url, title, referer, userAgent, subtitles, debug, socketPath, startSecs, cfg)
+func StartPlayer(url, title, referer, userAgent, origin string, subtitles []string, debug bool, socketPath string, startSecs float64, cfg *Config) (*exec.Cmd, error) {
+	cmd, err := buildPlayerCmd(url, title, referer, userAgent, origin, subtitles, debug, socketPath, startSecs, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -420,8 +430,9 @@ type PlayResult struct {
 // before returning so the caller can act on the chosen action immediately.
 // Position is tracked in real-time via MPV IPC (gopv), not via watch-later files.
 // hctx provides metadata for lifecycle hooks (on_play / on_exit).
+// origin, if non-empty, is sent as an Origin header by mpv.
 // Returns a PlayResult containing the chosen action and the last tracked position.
-func PlayWithControls(url, title, referer, userAgent string, subtitles []string, debug bool, startSecs float64, hctx HookContext) (PlayResult, error) {
+func PlayWithControls(url, title, referer, userAgent, origin string, subtitles []string, debug bool, startSecs float64, hctx HookContext) (PlayResult, error) {
 	cfg := LoadConfig()
 
 	for {
@@ -440,13 +451,17 @@ func PlayWithControls(url, title, referer, userAgent string, subtitles []string,
 			}
 		}
 
-		cmd, err := StartPlayer(url, title, referer, userAgent, subtitles, debug, socketPath, startSecs, cfg)
+		cmd, err := StartPlayer(url, title, referer, userAgent, origin, subtitles, debug, socketPath, startSecs, cfg)
 		if err != nil {
 			if socketPath != "" {
 				os.Remove(socketPath)
 			}
 			return PlayResult{Action: PlaybackQuit}, err
 		}
+
+		// Start the startup window before the IPC connect below, which itself
+		// can take a couple of seconds while the socket appears.
+		playerStart := time.Now()
 
 		// Connect to IPC and keep a live position counter.
 		var ipcClient *gopv.Client
@@ -488,12 +503,15 @@ func PlayWithControls(url, title, referer, userAgent string, subtitles []string,
 			close(done)
 		}()
 
-		if debug {
-			select {
-			case <-done:
-				return PlayResult{Action: PlaybackQuit}, fmt.Errorf("player exited immediately after launch")
-			case <-time.After(1500 * time.Millisecond):
-			}
+		// Give the player time to actually start before showing the control
+		// menu; the menu shows before the window otherwise and an accidental
+		// Enter there is treated as Quit. Immediate exits are real errors,
+		// not silent closes. The window is anchored to player launch, not to
+		// after connectMPVIPC, which can spend seconds waiting for the socket.
+		select {
+		case <-done:
+			return PlayResult{Action: PlaybackQuit}, fmt.Errorf("player exited immediately after launch (check the player and stream)")
+		case <-time.After(time.Until(playerStart.Add(3 * time.Second))):
 		}
 
 		chosen := SelectActionCtx("Playback:", []string{
