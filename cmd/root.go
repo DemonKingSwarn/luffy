@@ -99,6 +99,8 @@ var rootCmd = &cobra.Command{
 			provider = providers.NewAnimeDub(client)
 		} else if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") {
 			provider = providers.NewCineby(client)
+		} else if strings.EqualFold(providerName, "cinejoy") {
+			provider = providers.NewCinejoy(client)
 		} else if strings.EqualFold(providerName, "youtube") {
 			provider = providers.NewYouTube(client)
 		} else {
@@ -151,6 +153,8 @@ var rootCmd = &cobra.Command{
 				histProvider = providers.NewAnimeDub(client)
 			case "cineby", "vidking", "videasy":
 				histProvider = providers.NewCineby(client)
+			case "cinejoy":
+				histProvider = providers.NewCinejoy(client)
 			default:
 				histProviderName = "cineby"
 				histProvider = providers.NewCineby(client)
@@ -259,7 +263,7 @@ var rootCmd = &cobra.Command{
 						return err
 					}
 					lastPos := getLastPosition(histDB, ctx.Title, 0, 0)
-					result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag, lastPos, core.HookContext{
+					result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, streamOrigin(histProviderName), subtitles, debugFlag, lastPos, core.HookContext{
 						Title:    ctx.Title,
 						URL:      link,
 						Provider: histProviderName,
@@ -467,7 +471,7 @@ var rootCmd = &cobra.Command{
 						return err
 					}
 					lastPos := getLastPosition(histDB, ctx.Title, 0, 0)
-					result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag, lastPos, core.HookContext{
+					result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, streamOrigin(providerName), subtitles, debugFlag, lastPos, core.HookContext{
 						Title:    ctx.Title,
 						URL:      link,
 						Provider: providerName,
@@ -727,7 +731,7 @@ var rootCmd = &cobra.Command{
 					fmt.Printf("Referer: %s\n", referer)
 				}
 				lastPos := getLastPosition(histDB, ctx.Title, 0, 0)
-				result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, subtitles, debugFlag, lastPos, core.HookContext{
+				result, err := core.PlayWithControls(streamURL, ctx.Title, referer, USER_AGENT, streamOrigin(providerName), subtitles, debugFlag, lastPos, core.HookContext{
 					Title:    ctx.Title,
 					URL:      link,
 					Provider: providerName,
@@ -796,6 +800,15 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+// streamOrigin returns the extra Origin header required by the given
+// provider's CDNs during player playback, or "" when none is needed.
+func streamOrigin(providerName string) string {
+	if strings.EqualFold(providerName, "cinejoy") {
+		return providers.CinejoyBaseURL
+	}
+	return ""
+}
+
 // resolveStreamURL takes a raw provider link and returns the final playable
 // stream URL, the referer to use, and any subtitle URLs.
 func resolveStreamURL(
@@ -813,6 +826,9 @@ func resolveStreamURL(
 	}
 	if isAnimeProvider(providerName) {
 		referer = "https://allmanga.to"
+	}
+	if strings.EqualFold(providerName, "cinejoy") {
+		referer = providers.CinejoyBaseURL + "/"
 	}
 	if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") {
 		referer = "https://www.vidking.net/"
@@ -843,7 +859,7 @@ func resolveStreamURL(
 		if streamURL == "" {
 			streamURL = link
 		}
-	} else if isAnimeProvider(providerName) || strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") || strings.EqualFold(providerName, "youtube") {
+	} else if isAnimeProvider(providerName) || strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") || strings.EqualFold(providerName, "cinejoy") || strings.EqualFold(providerName, "youtube") {
 		streamURL = link
 		if idx := strings.Index(streamURL, "|referer="); idx != -1 {
 			refererStr := streamURL[idx+9:]
@@ -1043,7 +1059,7 @@ func buildProcessStream(
 				fmt.Printf("Referer: %s\n", referer)
 			}
 			lastPos := getLastPosition(histDB, ctx.Title, season, episode)
-			posSecs, playErr := core.Play(streamURL, name, referer, USER_AGENT, subtitles, debugMode, lastPos, core.HookContext{
+			posSecs, playErr := core.Play(streamURL, name, referer, USER_AGENT, streamOrigin(providerName), subtitles, debugMode, lastPos, core.HookContext{
 				Title:    ctx.Title,
 				URL:      link,
 				Season:   season,
@@ -1136,7 +1152,7 @@ func playSeriesWithControls(
 		}
 
 		lastPos := getLastPosition(histDB, ctx.Title, seasonNum, ewn.num)
-		result, err := core.PlayWithControls(streamURL, ctx.Title+" - "+ep.Name, referer, USER_AGENT, subtitles, debugMode, lastPos, core.HookContext{
+		result, err := core.PlayWithControls(streamURL, ctx.Title+" - "+ep.Name, referer, USER_AGENT, streamOrigin(providerName), subtitles, debugMode, lastPos, core.HookContext{
 			Title:    ctx.Title,
 			URL:      link,
 			Season:   seasonNum,
