@@ -340,12 +340,13 @@ You can set the default provider in the config file (`~/.config/luffy/config.yam
 | Provider | `provider:` value | Content | Notes |
 |----------|-------------------|---------|-------|
 | Cineby | `cineby` | Movies & TV | Default. Uses VidKing embeds. |
+| Cinejoy | `cinejoy` | Movies & TV | Browser-free sealed resolver; auto-races Lisbon/Nebula/Solara. |
 | Anime (sub) | `anime` or `allanime` | Anime | Subtitled. Uses AllAnime. |
 | Anime (dub) | `anime-dub` or `allanime-dub` | Anime | Dubbed. Uses AllAnime. |
 
 Example config:
 ```yaml
-provider: cineby
+provider: cinejoy
 ```
 
 ---
