@@ -98,14 +98,16 @@ var rootCmd = &cobra.Command{
 		} else if strings.EqualFold(providerName, "anime-dub") || strings.EqualFold(providerName, "allanime-dub") {
 			provider = providers.NewAnimeDub(client)
 		} else if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") {
-			provider = providers.NewCineby(client)
+			// Videasy backend is being shut down; legacy names resolve via
+			// Cinejoy so existing configs keep working.
+			provider = providers.NewCinejoy(client)
 		} else if strings.EqualFold(providerName, "cinejoy") {
 			provider = providers.NewCinejoy(client)
 		} else if strings.EqualFold(providerName, "youtube") {
 			provider = providers.NewYouTube(client)
 		} else {
-			providerName = "cineby"
-			provider = providers.NewCineby(client)
+			providerName = "cinejoy"
+			provider = providers.NewCinejoy(client)
 		}
 
 		// Open history DB once; non-fatal if it fails.
@@ -151,13 +153,11 @@ var rootCmd = &cobra.Command{
 				histProvider = providers.NewYouTube(client)
 			case "anime-dub", "allanime-dub":
 				histProvider = providers.NewAnimeDub(client)
-			case "cineby", "vidking", "videasy":
-				histProvider = providers.NewCineby(client)
-			case "cinejoy":
+			case "cineby", "vidking", "videasy", "cinejoy":
 				histProvider = providers.NewCinejoy(client)
 			default:
-				histProviderName = "cineby"
-				histProvider = providers.NewCineby(client)
+				histProviderName = "cinejoy"
+				histProvider = providers.NewCinejoy(client)
 			}
 
 			ctx.Title = chosen.Title
@@ -830,9 +830,6 @@ func resolveStreamURL(
 	if strings.EqualFold(providerName, "cinejoy") {
 		referer = providers.CinejoyBaseURL + "/"
 	}
-	if strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") {
-		referer = "https://www.vidking.net/"
-	}
 
 	if strings.EqualFold(providerName, "hdrezka") {
 		streams := strings.Split(link, ",")
@@ -859,7 +856,7 @@ func resolveStreamURL(
 		if streamURL == "" {
 			streamURL = link
 		}
-	} else if isAnimeProvider(providerName) || strings.EqualFold(providerName, "cineby") || strings.EqualFold(providerName, "vidking") || strings.EqualFold(providerName, "videasy") || strings.EqualFold(providerName, "cinejoy") || strings.EqualFold(providerName, "youtube") {
+	} else if isAnimeProvider(providerName) || strings.EqualFold(providerName, "cinejoy") || strings.EqualFold(providerName, "youtube") {
 		streamURL = link
 		if idx := strings.Index(streamURL, "|referer="); idx != -1 {
 			refererStr := streamURL[idx+9:]
