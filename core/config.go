@@ -36,6 +36,9 @@ type Config struct {
 	Provider     string `yaml:"provider"`
 	DlPath       string `yaml:"dl_path"`
 	Quality      string `yaml:"quality"`
+	// AudioDelay shifts audio relative to video in seconds for mpv: positive
+	// values delay audio (use when audio plays early), negative advance it.
+	AudioDelay float64 `yaml:"audio_delay"`
 	// MpvArgs holds extra command-line arguments appended to every mpv invocation.
 	// Example: ["--hwdec=auto", "--volume=80"]
 	MpvArgs []string    `yaml:"mpv_args"`

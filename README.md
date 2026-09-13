@@ -287,6 +287,10 @@ dl_path: ""
 # to always auto-select the highest available quality.
 quality: ""
 
+# Shift audio relative to video (seconds; positive delays audio, negative
+# advances it) — use if a stream's audio plays slightly early/late.
+audio_delay: 0
+
 # Extra arguments appended to every mpv invocation (ignored on VLC/IINA/Android).
 # mpv_args:
 #   - "--hwdec=auto"
