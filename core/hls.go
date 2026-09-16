@@ -4,10 +4,14 @@ package core
 import (
 	"bufio"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,11 +27,29 @@ type hlsSegment struct {
 	URL      string
 	Index    int
 	Duration float64
+	// Key, when non-nil, marks an AES-128 encrypted segment.
+	Key *hlsKey
+}
+
+// hlsKey describes an EXT-X-KEY encryption entry.
+type hlsKey struct {
+	Method string // only AES-128 is decrypted; NONE clears encryption
+	URI    string // absolute key URI
+	IV     []byte // 16-byte IV, or nil to derive from the media sequence
 }
 
 // hlsPlaylist represents a parsed HLS media playlist.
 type hlsPlaylist struct {
 	Segments []hlsSegment
+	// InitSegment is the EXT-X-MAP initialization segment for fMP4 streams.
+	// It must be written before the media segments or the result is not
+	// decodable.
+	InitSegment string
+	// InitKey is the encryption applied to the init segment, if any.
+	InitKey *hlsKey
+	// MediaSequence is the EXT-X-MEDIA-SEQUENCE value, used to derive
+	// per-segment IVs when the key tag does not carry an explicit IV.
+	MediaSequence int
 }
 
 // hlsDownloader handles concurrent HLS stream downloads.
@@ -82,6 +104,48 @@ func (d *hlsDownloader) downloadWithProgress(ctx context.Context, url, output st
 	}
 	defer func() { _ = outFile.Close() }()
 
+	// fMP4 HLS: write the initialization segment before any media segments,
+	// otherwise the concatenated output is not decodable.
+	if playlist.InitSegment != "" {
+		initData, initErr := d.downloadSegment(ctx, playlist.InitSegment, headers)
+		if initErr != nil {
+			return fmt.Errorf("failed to download init segment: %w", initErr)
+		}
+		if playlist.InitKey != nil {
+			iv := playlist.InitKey.IV
+			if iv == nil {
+				iv = sequenceIV(playlist.MediaSequence, 0)
+			}
+			keyBytes, keyErr := d.fetchKey(ctx, playlist.InitKey.URI, headers)
+			if keyErr != nil {
+				return fmt.Errorf("failed to fetch decryption key: %w", keyErr)
+			}
+			initData, initErr = decryptHLSSegment(initData, keyBytes, iv)
+			if initErr != nil {
+				return fmt.Errorf("failed to decrypt init segment: %w", initErr)
+			}
+		}
+		if _, wErr := outFile.Write(initData); wErr != nil {
+			return fmt.Errorf("failed to write init segment: %w", wErr)
+		}
+	}
+
+	// Fetch decryption keys once per playlist before the workers start.
+	keyBytes := map[string][]byte{}
+	for _, seg := range playlist.Segments {
+		if seg.Key == nil {
+			continue
+		}
+		if _, ok := keyBytes[seg.Key.URI]; ok {
+			continue
+		}
+		data, keyErr := d.fetchKey(ctx, seg.Key.URI, headers)
+		if keyErr != nil {
+			return fmt.Errorf("failed to fetch decryption key: %w", keyErr)
+		}
+		keyBytes[seg.Key.URI] = data
+	}
+
 	totalSegments := len(playlist.Segments)
 	var downloadedSegments int32
 
@@ -123,6 +187,13 @@ func (d *hlsDownloader) downloadWithProgress(ctx context.Context, url, output st
 				default:
 				}
 				data, err := d.downloadSegment(ctx, j.segment.URL, headers)
+				if err == nil && j.segment.Key != nil {
+					iv := j.segment.Key.IV
+					if iv == nil {
+						iv = sequenceIV(playlist.MediaSequence, j.index)
+					}
+					data, err = decryptHLSSegment(data, keyBytes[j.segment.Key.URI], iv)
+				}
 				results <- result{index: j.index, data: data, err: err}
 			}
 		}()
@@ -310,13 +381,28 @@ func selectBestVariant(lines []string, baseURL string) string {
 func parseMediaPlaylistLines(lines []string, baseURL string) *hlsPlaylist {
 	playlist := &hlsPlaylist{}
 	idx := 0
+	var currentKey *hlsKey
 
 	for i, line := range lines {
-		if !strings.HasPrefix(line, "#EXTINF:") {
+		if strings.HasPrefix(line, "#EXT-X-MEDIA-SEQUENCE:") {
+			if n, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "#EXT-X-MEDIA-SEQUENCE:"))); err == nil {
+				playlist.MediaSequence = n
+			}
 			continue
 		}
-		if i+1 >= len(lines) {
-			break
+		if strings.HasPrefix(line, "#EXT-X-KEY:") {
+			currentKey = parseHLSKey(line, baseURL)
+			continue
+		}
+		if strings.HasPrefix(line, "#EXT-X-MAP:") {
+			if uri := extractAttribute(line, "URI"); uri != "" {
+				playlist.InitSegment = resolvePlaylistURL(baseURL, uri)
+				playlist.InitKey = currentKey
+			}
+			continue
+		}
+		if !strings.HasPrefix(line, "#EXTINF:") {
+			continue
 		}
 		infLine := strings.TrimPrefix(line, "#EXTINF:")
 		parts := strings.SplitN(infLine, ",", 2)
@@ -325,29 +411,128 @@ func parseMediaPlaylistLines(lines []string, baseURL string) *hlsPlaylist {
 			duration, _ = strconv.ParseFloat(strings.TrimRight(parts[0], ", "), 64)
 		}
 
-		segURL := strings.TrimSpace(lines[i+1])
-		if segURL == "" || strings.HasPrefix(segURL, "#") {
+		// The segment URI is the next non-tag line: playlists may interleave
+		// tags such as #EXT-X-BITRATE between EXTINF and the URI.
+		segURL := ""
+		for j := i + 1; j < len(lines); j++ {
+			candidate := strings.TrimSpace(lines[j])
+			if candidate == "" || strings.HasPrefix(candidate, "#") {
+				continue
+			}
+			segURL = candidate
+			break
+		}
+		if segURL == "" {
 			continue
 		}
-		if !strings.HasPrefix(segURL, "http") {
-			base := baseURL
-			if j := strings.LastIndex(base, "/"); j != -1 {
-				base = base[:j+1]
-			} else {
-				base += "/"
-			}
-			segURL = base + segURL
-		}
+		segURL = resolvePlaylistURL(baseURL, segURL)
 
 		playlist.Segments = append(playlist.Segments, hlsSegment{
 			URL:      segURL,
 			Index:    idx,
 			Duration: duration,
+			Key:      currentKey,
 		})
 		idx++
 	}
 
 	return playlist
+}
+
+// parseHLSKey parses an EXT-X-KEY tag. METHOD=NONE clears encryption; AES-128
+// keys are resolved against the playlist URL.
+func parseHLSKey(line, baseURL string) *hlsKey {
+	method := extractRawAttribute(line, "METHOD")
+	if method == "" || strings.EqualFold(method, "NONE") {
+		return nil
+	}
+	if !strings.EqualFold(method, "AES-128") {
+		// Unsupported methods (e.g. SAMPLE-AES) are left as-is; segments will
+		// be downloaded raw rather than corrupted by a wrong decryption.
+		return nil
+	}
+	key := &hlsKey{Method: "AES-128"}
+	if uri := extractAttribute(line, "URI"); uri != "" {
+		key.URI = resolvePlaylistURL(baseURL, uri)
+	}
+	if iv := extractRawAttribute(line, "IV"); iv != "" {
+		key.IV = parseHLSIV(iv)
+	}
+	if key.URI == "" {
+		return nil
+	}
+	return key
+}
+
+// parseHLSIV decodes a 0x-prefixed hex IV into 16 bytes.
+func parseHLSIV(raw string) []byte {
+	raw = strings.TrimPrefix(strings.TrimPrefix(raw, "0x"), "0X")
+	if len(raw)%2 != 0 {
+		raw = "0" + raw
+	}
+	iv := make([]byte, len(raw)/2)
+	for i := 0; i < len(iv); i++ {
+		value, err := strconv.ParseUint(raw[i*2:i*2+2], 16, 8)
+		if err != nil {
+			return nil
+		}
+		iv[i] = byte(value)
+	}
+	if len(iv) != 16 {
+		return nil
+	}
+	return iv
+}
+
+// resolvePlaylistURL resolves a possibly-relative playlist reference against
+// the playlist URL. Root-relative references (e.g. /storage/enc.key) resolve
+// against the playlist's origin.
+func resolvePlaylistURL(baseURL, ref string) string {
+	if strings.HasPrefix(ref, "http") {
+		return ref
+	}
+	if strings.HasPrefix(ref, "/") {
+		if u, err := url.Parse(baseURL); err == nil && u.Host != "" {
+			return u.Scheme + "://" + u.Host + ref
+		}
+	}
+	base := baseURL
+	if j := strings.LastIndex(base, "/"); j != -1 {
+		base = base[:j+1]
+	} else {
+		base += "/"
+	}
+	return base + ref
+}
+
+// extractAttribute returns the value of a quoted attribute (e.g. URI="x").
+func extractAttribute(line, name string) string {
+	needle := name + `="`
+	start := strings.Index(line, needle)
+	if start == -1 {
+		return ""
+	}
+	rest := line[start+len(needle):]
+	end := strings.Index(rest, `"`)
+	if end == -1 {
+		return ""
+	}
+	return rest[:end]
+}
+
+// extractRawAttribute returns the value of an unquoted attribute (e.g.
+// METHOD=AES-128 or IV=0x...), ending at the next comma.
+func extractRawAttribute(line, name string) string {
+	needle := name + "="
+	start := strings.Index(line, needle)
+	if start == -1 {
+		return ""
+	}
+	rest := line[start+len(needle):]
+	if end := strings.Index(rest, ","); end != -1 {
+		rest = rest[:end]
+	}
+	return strings.TrimSpace(rest)
 }
 
 // downloadSegment fetches a single .ts segment with exponential backoff retries.
@@ -393,6 +578,98 @@ func (d *hlsDownloader) downloadSegment(ctx context.Context, url string, headers
 	}
 
 	return nil, fmt.Errorf("segment failed after %d attempts: %w", maxRetries+1, lastErr)
+}
+
+// fetchKey downloads an AES-128 key file.
+func (d *hlsDownloader) fetchKey(ctx context.Context, keyURI string, headers map[string]string) ([]byte, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	data, err := d.fetchSegment(reqCtx, keyURI, headers)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) != 16 {
+		return nil, fmt.Errorf("unexpected key length %d", len(data))
+	}
+	return data, nil
+}
+
+// sequenceIV derives the AES-128 IV from the media sequence and segment index.
+func sequenceIV(mediaSequence, index int) []byte {
+	iv := make([]byte, 16)
+	binary.BigEndian.PutUint64(iv[8:], uint64(mediaSequence+index))
+	return iv
+}
+
+// decryptHLSSegment decrypts one AES-128-CBC segment and strips PKCS7 padding.
+func decryptHLSSegment(data, key, iv []byte) ([]byte, error) {
+	if len(key) != 16 {
+		return nil, fmt.Errorf("invalid AES-128 key length %d", len(key))
+	}
+	if len(iv) != 16 {
+		return nil, fmt.Errorf("invalid IV length %d", len(iv))
+	}
+	if len(data) == 0 || len(data)%aes.BlockSize != 0 {
+		return nil, fmt.Errorf("encrypted segment is not block-aligned")
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]byte, len(data))
+	cipher.NewCBCDecrypter(block, iv).CryptBlocks(out, data)
+	return pkcs7Unpad(out), nil
+}
+
+// DownloadHLSAudio downloads the primary audio rendition of an HLS master
+// playlist into outputPath. It returns false (with no error) when the master
+// has no separate audio rendition, in which case audio is expected to be
+// muxed into the video segments.
+func DownloadHLSAudio(ctx context.Context, masterURL, outputPath, referer string) (bool, error) {
+	d := newHLSDownloader()
+	headers := map[string]string{}
+	if referer != "" {
+		headers["Referer"] = referer
+	}
+
+	lines, err := d.fetchLines(ctx, masterURL, headers)
+	if err != nil {
+		return false, err
+	}
+	audioURL := selectAudioRendition(lines, masterURL)
+	if audioURL == "" {
+		return false, nil
+	}
+	if err := d.downloadWithProgress(ctx, audioURL, outputPath, headers, nil); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// selectAudioRendition picks an audio rendition URI from master playlist lines,
+// preferring the DEFAULT=YES entry and returning "" when none exists.
+func selectAudioRendition(lines []string, masterURL string) string {
+	var fallback string
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "#EXT-X-MEDIA:") {
+			continue
+		}
+		if !strings.EqualFold(extractRawAttribute(line, "TYPE"), "AUDIO") {
+			continue
+		}
+		uri := extractAttribute(line, "URI")
+		if uri == "" {
+			continue
+		}
+		resolved := resolvePlaylistURL(masterURL, uri)
+		if strings.EqualFold(extractRawAttribute(line, "DEFAULT"), "YES") {
+			return resolved
+		}
+		if fallback == "" {
+			fallback = resolved
+		}
+	}
+	return fallback
 }
 
 // fetchSegment performs a single HTTP GET for a segment URL.

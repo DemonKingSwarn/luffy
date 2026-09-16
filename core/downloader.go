@@ -35,6 +35,12 @@ func Download(basePath, dlPath, name, url, referer, userAgent string, subtitles 
 	cleanName := sanitizeFilename(name)
 
 	isHLS := strings.Contains(url, ".m3u8")
+	if !isHLS {
+		// Some providers serve playlists from extensionless URLs (e.g.
+		// /playlist/{id}?token=...); sniff the content instead of trusting
+		// the URL shape, otherwise the playlist itself is saved as a video.
+		isHLS = probeHLS(url, referer, userAgent)
+	}
 
 	// HLS streams are downloaded as raw MPEG-TS first, then remuxed to .mp4
 	// via ffmpeg (stream copy — no re-encode). Direct files are saved as .mp4.
@@ -83,8 +89,23 @@ func Download(basePath, dlPath, name, url, referer, userAgent string, subtitles 
 	}
 
 	var err error
+	audioPath := ""
 	if isHLS {
 		err = downloadHLSWithProgress(ctx, url, outputPath, headers, debug)
+		if err == nil {
+			// HLS masters may carry audio as a separate rendition. Download it
+			// too so the remuxed file is not silent.
+			audioPath = outputPath + ".audio.ts"
+			hasAudio, audioErr := DownloadHLSAudio(ctx, url, audioPath, referer)
+			if audioErr != nil {
+				if debug {
+					fmt.Printf("[download] Audio rendition unavailable: %v\n", audioErr)
+				}
+				audioPath = ""
+			} else if !hasAudio {
+				audioPath = ""
+			}
+		}
 	} else {
 		err = downloadDirect(ctx, url, outputPath, headers, debug)
 	}
@@ -106,10 +127,13 @@ func Download(basePath, dlPath, name, url, referer, userAgent string, subtitles 
 		// ensureUnique for the .mp4 in case it already exists too.
 		mp4Path = ensureUnique(mp4Path)
 		fmt.Printf("[download] Remuxing to mp4: %s\n", mp4Path)
-		if ffErr := remuxToMP4(outputPath, mp4Path, debug); ffErr != nil {
+		if ffErr := remuxToMP4(outputPath, audioPath, mp4Path, debug); ffErr != nil {
 			fmt.Printf("[warning] ffmpeg remux failed (%v); keeping .ts file\n", ffErr)
 		} else {
 			_ = os.Remove(outputPath) // remove the intermediate .ts
+			if audioPath != "" {
+				_ = os.Remove(audioPath)
+			}
 			outputPath = mp4Path
 		}
 	}
@@ -195,11 +219,18 @@ func downloadHLSWithProgress(ctx context.Context, url, output string, headers ma
 }
 
 // remuxToMP4 runs ffmpeg to stream-copy src (.ts) into dst (.mp4).
-func remuxToMP4(src, dst string, debug bool) error {
+// remuxToMP4 stream-copies the downloaded video (and optional separate HLS
+// audio rendition) into an .mp4 container.
+func remuxToMP4(src, audioSrc, dst string, debug bool) error {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		return fmt.Errorf("ffmpeg not found: %w", err)
 	}
-	args := []string{"-i", src, "-c", "copy", dst}
+	args := []string{"-i", src}
+	if audioSrc != "" {
+		args = append(args, "-i", audioSrc)
+		args = append(args, "-map", "0:v:0", "-map", "1:a:0")
+	}
+	args = append(args, "-c", "copy", dst)
 	if !debug {
 		// Suppress ffmpeg banner and stats output when not debugging.
 		args = append([]string{"-hide_banner", "-loglevel", "error"}, args...)
@@ -245,6 +276,36 @@ func downloadDirect(ctx context.Context, url, output string, headers map[string]
 	}
 
 	return downloadDirectSingle(ctx, url, output, headers, debug)
+}
+
+// probeHLS reports whether the URL serves an HLS manifest despite lacking an
+// .m3u8 extension. It reads only the first bytes of the response so direct
+// media files are not consumed.
+func probeHLS(rawURL, referer, userAgent string) bool {
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return false
+	}
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+	}
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	}
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return false
+	}
+	buf := make([]byte, 512)
+	n, err := io.ReadFull(resp.Body, buf)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return false
+	}
+	return strings.HasPrefix(string(buf[:n]), "#EXTM3U")
 }
 
 // downloadDirectConcurrent downloads url in numParts parallel byte-range chunks.
