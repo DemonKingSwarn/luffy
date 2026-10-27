@@ -154,8 +154,8 @@ func decodeProof(streamURL string) error {
 	cmd := exec.Command("mpv", "--no-config", "--vo=null", "--ao=null", "--length=3",
 		"--network-timeout=10", "--ytdl=no",
 		"--user-agent="+userAgent,
-		"--referrer=https://cinejoy.to/",
-		"--http-header-fields=Origin: https://cinejoy.to",
+		"--referrer="+providers.CinejoyBaseURL+"/",
+		"--http-header-fields=Origin: "+providers.CinejoyBaseURL,
 		"--term-status-msg=PROBE time=${time-pos}",
 		streamURL)
 	cmd.Stderr = os.Stderr

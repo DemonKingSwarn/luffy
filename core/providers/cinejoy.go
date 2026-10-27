@@ -26,13 +26,17 @@ import (
 const (
 	// CinejoyBaseURL is the site origin used for Search result URLs, metadata,
 	// and the Referer/Origin values required by Cinejoy CDNs during playback.
-	CinejoyBaseURL = "https://cinejoy.to"
+	CinejoyBaseURL = "https://cinejoy.pk"
 	// CinejoyAPI is the resolver endpoint family used for sealed requests.
-	CinejoyAPI = "https://api.shegu.st"
+	// The former api.shegu.st origin is gone (Cloudflare 530); the operator's
+	// stack now lives on api.wing.st (confirmed via certificate transparency).
+	CinejoyAPI = "https://api.wing.st"
 
 	// cjWASMSHA256 pins the upstream import-free encoder. A changed encoder
 	// fails closed and requires inspection before the pin is updated.
-	cjWASMSHA256 = "b706f1f2d21ef20d49758672dbdf3559b0d0916bb19850b0ef04991918eea73c"
+	// Inspected 2026-10-27: no import section at all (pure computation), and
+	// it exports exactly memory/alloc/dealloc/seal_request/__data_end/__heap_base.
+	cjWASMSHA256 = "40c923580779e2a850fc5ab3f0046be565ed717883cf4547ed3a87de2450bdcf"
 
 	cjMaxConcurrency   = 3
 	cjHTTPTimeout      = 15 * time.Second

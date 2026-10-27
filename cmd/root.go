@@ -105,6 +105,8 @@ var rootCmd = &cobra.Command{
 			provider = providers.NewCinejoy(client)
 		} else if strings.EqualFold(providerName, "youtube") {
 			provider = providers.NewYouTube(client)
+		} else if strings.EqualFold(providerName, "streamo") {
+			provider = providers.NewStreamo(client)
 		} else {
 			providerName = "cinejoy"
 			provider = providers.NewCinejoy(client)
@@ -155,6 +157,8 @@ var rootCmd = &cobra.Command{
 				histProvider = providers.NewAnimeDub(client)
 			case "cineby", "vidking", "videasy", "cinejoy":
 				histProvider = providers.NewCinejoy(client)
+			case "streamo":
+				histProvider = providers.NewStreamo(client)
 			default:
 				histProviderName = "cinejoy"
 				histProvider = providers.NewCinejoy(client)
@@ -806,6 +810,9 @@ func streamOrigin(providerName string) string {
 	if strings.EqualFold(providerName, "cinejoy") {
 		return providers.CinejoyBaseURL
 	}
+	if strings.EqualFold(providerName, "streamo") {
+		return providers.StreamoBaseURL
+	}
 	return ""
 }
 
@@ -829,6 +836,9 @@ func resolveStreamURL(
 	}
 	if strings.EqualFold(providerName, "cinejoy") {
 		referer = providers.CinejoyBaseURL + "/"
+	}
+	if strings.EqualFold(providerName, "streamo") {
+		referer = providers.StreamoBaseURL + "/"
 	}
 
 	if strings.EqualFold(providerName, "hdrezka") {
@@ -856,7 +866,7 @@ func resolveStreamURL(
 		if streamURL == "" {
 			streamURL = link
 		}
-	} else if isAnimeProvider(providerName) || strings.EqualFold(providerName, "cinejoy") || strings.EqualFold(providerName, "youtube") {
+	} else if isAnimeProvider(providerName) || strings.EqualFold(providerName, "cinejoy") || strings.EqualFold(providerName, "streamo") || strings.EqualFold(providerName, "youtube") {
 		streamURL = link
 		if idx := strings.Index(streamURL, "|referer="); idx != -1 {
 			refererStr := streamURL[idx+9:]
@@ -914,11 +924,11 @@ func resolveStreamURL(
 		}
 	}
 
-	// Cinejoy masters carry their audio as a separate rendition group; handing
-	// a bare variant playlist to the player loses audio entirely. The master
-	// itself (with its DEFAULT=YES variant and audio group) is passed through
-	// so the player picks both tracks itself.
-	if strings.EqualFold(providerName, "cinejoy") {
+	// Cinejoy and Streamo masters carry their audio as a separate rendition
+	// group; handing a bare variant playlist to the player loses audio
+	// entirely. The master itself (with its DEFAULT=YES variant and audio
+	// group) is passed through so the player picks both tracks itself.
+	if strings.EqualFold(providerName, "cinejoy") || strings.EqualFold(providerName, "streamo") {
 		return
 	}
 
