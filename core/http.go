@@ -41,12 +41,17 @@ func NewClient() *http.Client {
 			},
 			DialContext:           dialer.DialContext,
 			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          100,
+			MaxIdleConns:          200,
+			MaxIdleConnsPerHost:   32,
+			MaxConnsPerHost:       32,
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
+			DisableCompression:    false,
+			WriteBufferSize:       64 * 1024,
+			ReadBufferSize:        64 * 1024,
 		},
-		Timeout: 30 * time.Second,
+		Timeout: 0,
 	}
 }
 

@@ -58,9 +58,9 @@ type hlsDownloader struct {
 }
 
 func newHLSDownloader() *hlsDownloader {
+	// Reuse a well-tuned transport for connection pooling and HTTP/2.
 	return &hlsDownloader{
-		// No global timeout: individual segment fetches use per-request timeouts.
-		client: &http.Client{},
+		client: NewClient(),
 	}
 }
 
@@ -153,12 +153,18 @@ func (d *hlsDownloader) downloadWithProgress(ctx context.Context, url, output st
 		progressCallback(0, totalSegments)
 	}
 
-	const maxWorkers = 8
-	// Allow up to 2 % of segments to fail permanently before giving up.
-	// Always allow at least 3 failures for very short playlists.
-	maxFailedSegments := totalSegments * 2 / 100
-	if maxFailedSegments < 3 {
-		maxFailedSegments = 3
+	maxWorkers := 16
+	if totalSegments < 16 {
+		maxWorkers = totalSegments
+		if maxWorkers < 4 {
+			maxWorkers = 4
+		}
+	}
+	// Allow up to 5 % of segments to fail permanently before giving up.
+	// Always allow at least 5 failures for very short playlists.
+	maxFailedSegments := totalSegments * 5 / 100
+	if maxFailedSegments < 5 {
+		maxFailedSegments = 5
 	}
 
 	type job struct {
@@ -560,7 +566,7 @@ func (d *hlsDownloader) downloadSegment(ctx context.Context, url string, headers
 		}
 
 		// Per-request timeout: generous enough for large segments on slow CDNs.
-		reqCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		reqCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 		data, err := d.fetchSegment(reqCtx, url, headers)
 		cancel()
 

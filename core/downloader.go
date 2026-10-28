@@ -254,7 +254,10 @@ func downloadDirect(ctx context.Context, url, output string, headers map[string]
 		headReq.Header.Set(k, v)
 	}
 
-	headClient := &http.Client{Timeout: 10 * time.Second}
+	headClient := &http.Client{
+		Transport: NewClient().Transport,
+		Timeout:   10 * time.Second,
+	}
 	resp, err := headClient.Do(headReq)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		if resp != nil {
@@ -267,8 +270,8 @@ func downloadDirect(ctx context.Context, url, output string, headers map[string]
 	contentLength := resp.ContentLength
 	acceptRanges := resp.Header.Get("Accept-Ranges")
 
-	// Use parallel download when ranges are supported and file is >10 MB.
-	if contentLength > 10*1024*1024 && acceptRanges == "bytes" {
+	// Use parallel download when ranges are supported and file is >5 MB.
+	if contentLength > 5*1024*1024 && acceptRanges == "bytes" {
 		if debug {
 			fmt.Printf("[download] Using parallel download (%d bytes)\n", contentLength)
 		}
@@ -323,9 +326,15 @@ func downloadDirectConcurrent(ctx context.Context, url, output string, headers m
 		return fmt.Errorf("failed to allocate file: %w", err)
 	}
 
-	const numParts = 8
+	numParts := 16
+	if totalBytes < 50*1024*1024 {
+		numParts = 8
+	}
+	if numParts < 4 {
+		numParts = 4
+	}
 	const maxPartRetries = 6
-	partSize := totalBytes / numParts
+	partSize := totalBytes / int64(numParts)
 
 	var wg sync.WaitGroup
 	errChan := make(chan error, numParts)
@@ -438,7 +447,10 @@ func downloadPart(ctx context.Context, url string, f *os.File, headers map[strin
 		req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
 	}
 
-	client := &http.Client{Timeout: 0}
+	client := &http.Client{
+		Transport: NewClient().Transport,
+		Timeout:   0,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, err
@@ -449,7 +461,7 @@ func downloadPart(ctx context.Context, url string, f *os.File, headers map[strin
 		return 0, fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
 
-	buf := make([]byte, 32*1024)
+	buf := make([]byte, 256*1024)
 	offset := start
 	var written int64
 	for {
@@ -488,7 +500,10 @@ func downloadDirectSingle(ctx context.Context, url, output string, headers map[s
 	var downloaded int64
 	lastReport := time.Now()
 
-	client := &http.Client{Timeout: 0}
+	client := &http.Client{
+		Transport: NewClient().Transport,
+		Timeout:   0,
+	}
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
@@ -554,7 +569,7 @@ func downloadDirectSingle(ctx context.Context, url, output string, headers map[s
 			downloaded = 0
 		}
 
-		buf := make([]byte, 32*1024)
+		buf := make([]byte, 256*1024)
 		var readErr error
 		for {
 			select {
@@ -661,8 +676,16 @@ func downloadFileWithRetry(url, path string, maxRetries int) error {
 
 // downloadFile downloads a single URL to path using a plain GET request.
 func downloadFile(url, path string) error {
-	client := NewClient()
-	resp, err := client.Get(url)
+	client := &http.Client{
+		Transport: NewClient().Transport,
+		Timeout:   30 * time.Second,
+	}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
